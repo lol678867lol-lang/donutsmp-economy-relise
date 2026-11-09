@@ -47,7 +47,7 @@ public final class OrderBuilder {
 
     static void results(DonutMod m, ServerPlayer p, String q) {
         String ql = q.toLowerCase(Locale.ROOT);
-        if (ql.equals("abbrechen")) { Gui.openOrders(m, p); return; }
+        if (ql.equals("abbrechen") || ql.equals("cancel")) { Gui.openOrders(m, p); return; }
         List<String> ids = new ArrayList<>();
         for (Item it : m.pool) {
             String id = m.idOf(it);
@@ -80,11 +80,16 @@ public final class OrderBuilder {
         if (!proto.isEmpty())
             for (Holder.Reference<Enchantment> h : m.enchList)
                 if (book || (proto.isEnchantable() && h.value().isSupportedItem(proto))) d.avail.add(h);
+        show(m, p, d);
+    }
+
+    /** Oeffnet das Order-Menue fuer einen (ggf. schon bearbeiteten) Entwurf. */
+    static void show(DonutMod m, ServerPlayer p, Draft d) {
         SimpleContainer box = new SimpleContainer(54);
         render(m, d, box);
         p.openMenu(new SimpleMenuProvider((cid, inv, pl) ->
                 new Gui.Menu(cid, inv, box, true, Set.<Integer>of(), (slot, sp) -> { click(m, d, sp, slot); render(m, d, box); }, null, null),
-                Component.literal("Neue Order")));
+                Lang.lit("Neue Order")));
     }
 
     /** Name einer schon gewaehlten Verzauberung, die sich mit h ausschliesst (z.B. Silk Touch und Fortune), sonst null. */
@@ -109,11 +114,11 @@ public final class OrderBuilder {
         box.setItem(17, Gui.named(Items.LIME_STAINED_GLASS_PANE, "§eMenge +1000"));
         box.setItem(0, Gui.named(Items.CLOCK, "§eMenge ÷ 10"));
         box.setItem(8, Gui.named(Items.NETHER_STAR, "§eMenge × 10", "§7Bis 1 Milliarde möglich"));
-        box.setItem(13, Gui.named(Items.PAPER, "§fMenge: §a" + DonutMod.fmt(d.amount)));
+        box.setItem(13, Gui.named(Items.PAPER, "§fMenge: §a" + DonutMod.fmt(d.amount), "§eKlick: eigene Menge eingeben"));
         int[] pSlots = {19, 20, 21, 23, 24, 25};
         String[] pNames = {"-1M", "-100k", "-10k", "+10k", "+100k", "+1M"};
         for (int i = 0; i < 6; i++) box.setItem(pSlots[i], Gui.named(i < 3 ? Items.RED_STAINED_GLASS_PANE : Items.LIME_STAINED_GLASS_PANE, "§6Preis " + pNames[i]));
-        box.setItem(22, Gui.named(Items.GOLD_INGOT, "§fPreis pro Stück: §a$" + DonutMod.fmt(d.price)));
+        box.setItem(22, Gui.named(Items.GOLD_INGOT, "§fPreis pro Stück: §a$" + DonutMod.fmt(d.price), "§eKlick: eigenen Preis eingeben"));
         box.setItem(18, Gui.named(Items.CLOCK, "§eMarktpreis setzen", "§7Setzt den Preis auf ca. den Sell-Preis +20 %"));
         box.setItem(26, Gui.named(Items.NETHER_STAR, "§eMal 2", "§7Verdoppelt den Preis"));
         for (int i = 0; i < 17; i++) {
@@ -137,6 +142,28 @@ public final class OrderBuilder {
     }
 
     static void click(DonutMod m, Draft d, ServerPlayer p, int slot) {
+        if (slot == 22) {   // eigener Preis (beliebiger Wert)
+            PriceEditor.ask(p, "§eTippe den Preis pro Stück in den Chat (z.B. 750, 1.5k, 2m). 'abbrechen' bricht ab.", in -> {
+                if (!PriceEditor.cancel(in)) {
+                    long v = DonutMod.parseAmount(in);
+                    if (v < 1) Gui.say(p, "§cUngültiger Preis. Beispiele: 500, 1.5k, 2m, 3b");
+                    else d.price = Math.min(1_000_000_000_000L, v);
+                }
+                show(m, p, d);
+            });
+            return;
+        }
+        if (slot == 13) {   // eigene Menge (beliebiger Wert)
+            PriceEditor.ask(p, "§eTippe die Menge in den Chat (z.B. 64, 10k, 1m). 'abbrechen' bricht ab.", in -> {
+                if (!PriceEditor.cancel(in)) {
+                    long v = DonutMod.parseAmount(in);
+                    if (v < 1 || v > 1_000_000_000L) Gui.say(p, "§cUngültige Menge (1 bis 1b). Beispiele: 64, 100k, 2m");
+                    else d.amount = v;
+                }
+                show(m, p, d);
+            });
+            return;
+        }
         int[] aSlots = {10, 11, 12, 14, 15, 16};
         int[] aDelta = {-64, -10, -1, 1, 10, 64};
         for (int i = 0; i < 6; i++) if (slot == aSlots[i]) d.amount = Math.max(1, Math.min(1_000_000_000, d.amount + aDelta[i]));

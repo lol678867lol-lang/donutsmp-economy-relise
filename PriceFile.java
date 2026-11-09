@@ -43,6 +43,19 @@ public class PriceFile {
         } catch (Exception e) { System.err.println("[DonutMod] Preisliste fehlgeschlagen: " + e); }
     }
 
+    /** Speichert einen geaenderten Basispreis in der Preisdatei (bleibt nach dem Neustart erhalten). */
+    static synchronized void set(String id, long base) {
+        try {
+            Map<String, Long> m = new TreeMap<>();
+            if (Files.exists(file())) {
+                Map<String, Long> old = new Gson().fromJson(Files.readString(file()), new TypeToken<Map<String, Long>>() {}.getType());
+                if (old != null) m.putAll(old);
+            }
+            m.put(id, base);
+            Files.writeString(file(), new GsonBuilder().setPrettyPrinting().create().toJson(m));
+        } catch (Exception e) { System.err.println("[DonutMod] Preis speichern fehlgeschlagen: " + e); }
+    }
+
     static void generate() throws java.io.IOException {
         Map<String, Long> known = new HashMap<>();
         for (Object[] r : DonutMod.KNOWN) known.put("minecraft:" + r[0], ((Number) r[1]).longValue());

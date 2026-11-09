@@ -62,7 +62,7 @@ public final class EnderStorage {
         }
         p.openMenu(new SimpleMenuProvider((cid, inv, pl) ->
                 new Gui.Menu(cid, inv, box, false, Set.<Integer>of(), (slot, sp) -> { }, null, sp -> save()),
-                Component.literal("Ender Chest (54 Plätze)")));
+                Lang.lit("Ender Chest (54 Plätze)")));
     }
 
     static void save() {

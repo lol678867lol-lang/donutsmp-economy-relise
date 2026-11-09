@@ -176,6 +176,11 @@ public final class Market {
         if (pool.isEmpty()) return;
         int made = 0, tries = 0;
         while (made < n && tries++ < n * 30) {
+            if (RND.nextInt(100) < 25) {   // jede vierte Order: Dinge aus den Basen (Netherite/Diamant-Gear, Gaps, Totems ...)
+                Bases.LootOrder lo = Bases.lootOrder(RND);
+                if (DonutMod.allowed(lo.id())) { m.orders.botOrder(lo.id(), lo.ench(), lo.amount(), RND); made++; }
+                continue;
+            }
             if (RND.nextInt(100) < 4) {
                 m.orders.botOrder(Custom.POTION_IDS.get(RND.nextInt(Custom.POTION_IDS.size())), NONE, 8 + RND.nextInt(193), RND);
                 made++;

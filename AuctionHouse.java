@@ -5,7 +5,7 @@ import java.util.*;
 public class AuctionHouse {
     public static final class Listing {
         public final int id; public final UUID seller; // null -> Bot
-        public final Stack stack; public final long price;
+        public final Stack stack; public long price;
         public boolean removed;   // schneller "gibt es noch"-Check statt Listensuche
         Listing(int id, UUID seller, Stack stack, long price) { this.id = id; this.seller = seller; this.stack = stack; this.price = price; }
     }
@@ -23,6 +23,13 @@ public class AuctionHouse {
         listings.add(l);
         if (seller != null) playerListings.add(l);
         return l;
+    }
+
+    /** Skaliert die Preise aller Bot-Angebote (Spieler-Angebote bleiben unveraendert). */
+    public int rescaleBots(double ratio) {
+        int n = 0;
+        for (Listing l : listings) if (l.seller == null) { l.price = Math.max(1, Math.round(l.price * ratio)); n++; }
+        return n;
     }
 
     public Listing botList(Stack s, Random rnd) {
@@ -61,10 +68,13 @@ public class AuctionHouse {
     }
 
     /** Bots kaufen nur Spieler-Angebote (schnell, auch bei Millionen Eintraegen); der Verkaeufer wird bezahlt. */
-    public List<Listing> botBuyPlayerListings(Random rnd) {
+    public List<Listing> botBuyPlayerListings(Random rnd) { return botBuyPlayerListings(rnd, 1); }
+
+    /** Wie oben, aber fuer mehrere Kauf-Runden auf einmal (/bot tick): Chance, in n Runden gekauft zu werden, ist 1-(1-p)^n. */
+    public List<Listing> botBuyPlayerListings(Random rnd, int rounds) {
         List<Listing> sold = new ArrayList<>();
         for (Listing l : new ArrayList<>(playerListings))
-            if (rnd.nextDouble() < playerChance(l)) {
+            if (rnd.nextDouble() < (rounds <= 1 ? playerChance(l) : 1.0 - Math.pow(1.0 - playerChance(l), rounds))) {
                 eco.add(l.seller, l.price);
                 removeListing(l);
                 sold.add(l);

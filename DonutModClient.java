@@ -21,8 +21,8 @@ public class DonutModClient implements ClientModInitializer {
             DonutMod.addStacks(stack, all);
             long sell = 0, market = 0;
             for (Stack s : all) { sell += m.prices.sellStackPrice(s); market += m.prices.stackPrice(s); }
-            lines.add(Component.literal("§7Sell: §a$" + DonutMod.fmt(sell)));
-            lines.add(Component.literal("§7AH-Wert: §6$" + DonutMod.fmt(market)));
+            lines.add(Lang.lit("§7Sell: §a$" + DonutMod.fmt(sell)));
+            lines.add(Lang.lit("§7AH-Wert: §6$" + DonutMod.fmt(market)));
         });
     }
 }

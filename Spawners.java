@@ -187,7 +187,12 @@ public final class Spawners {
                     it.remove();
                 } else if (p.age > 20) it.remove();
             }
-            if (server.getTickCount() % 1200 == 0) generate();
+            if (Settings.spawnerTick <= 1) { spawnAcc = 0; if (server.getTickCount() % 1200 == 0) generate(1); }
+            else {                                           // /spawner tick <n>: im Schnitt n Sammel-Runden pro Minute
+                spawnAcc += Settings.spawnerTick / 1200.0;
+                int r = (int) spawnAcc;
+                if (r >= 1) { spawnAcc -= r; generate(r); }
+            }
             if (server.getTickCount() % 6000 == 0) save();
         });
 
@@ -207,12 +212,20 @@ public final class Spawners {
         MAP.put(key(level, pos), s);
     }
 
-    static void generate() {
+    private static double spawnAcc = 0;
+
+    static void generate() { generate(1); }
+
+    /** Eine oder mehrere Sammel-Runden (bei /spawner tick > 1 gebuendelt: Menge = Runden * Basis +-10 %). */
+    static void generate(int rounds) {
         for (Sp s : MAP.values()) {
             Object[][] d = DROPS.get(s.type);
             if (d == null) continue;
             for (Object[] row : d) {
-                long n = Math.max(0, Math.round(((Number) row[1]).doubleValue() * (0.5 + DonutMod.RND.nextDouble()))) * s.stack;
+                double base = ((Number) row[1]).doubleValue();
+                long n = rounds <= 1
+                        ? Math.max(0, Math.round(base * (0.5 + DonutMod.RND.nextDouble()))) * s.stack
+                        : (long) Math.min(9e15, Math.max(0, Math.round(base * rounds * (0.9 + 0.2 * DonutMod.RND.nextDouble()))) * (double) s.stack);
                 if (n == 0) continue;
                 long cur = s.store.getOrDefault((String) row[0], 0L);
                 s.store.put((String) row[0], Math.min(CAP * s.stack, cur + n));

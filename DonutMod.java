@@ -164,13 +164,14 @@ public class DonutMod implements ModInitializer {
             if (amt <= 0) return;
             eco.take(victim.getUUID(), amt);
             eco.add(killer.getUUID(), amt);
-            srv.getPlayerList().broadcastSystemMessage(Component.literal("§c" + killer.getName().getString() + " §7hat §c"
+            srv.getPlayerList().broadcastSystemMessage(Lang.lit("§c" + killer.getName().getString() + " §7hat §c"
                     + victim.getName().getString() + " §7getötet und §a$" + fmtShort(amt) + " §7(10 %) erhalten."), false);
             ping(killer, SoundEvents.PLAYER_LEVELUP, 1.2f);
         });
         OrderBuilder.register(this);
+        PriceEditor.register(this);
 
-        ServerLifecycleEvents.SERVER_STARTED.register(server -> { srv = server; resetState(); Tpa.BY_TARGET.clear(); Hoppers.TRACKED.clear(); OrderBuilder.AWAIT.clear(); loadBalances(); loadNames(); Settings.load(); initEnchants(); PriceFile.loadInto(prices); Custom.registerPrices(prices); initItems(); loadMarket(); market = new Market(this); market.init(); seedCustom(); market.ensureCustomOrders(); });
+        ServerLifecycleEvents.SERVER_STARTED.register(server -> { srv = server; resetState(); Tpa.BY_TARGET.clear(); Hoppers.TRACKED.clear(); OrderBuilder.AWAIT.clear(); loadBalances(); loadNames(); Settings.load(); applyFactorsNoRescale(); initEnchants(); PriceFile.loadInto(prices); Custom.registerPrices(prices); initItems(); loadMarket(); market = new Market(this); market.init(); seedCustom(); market.ensureCustomOrders(); });
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> saveBalances());
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
             ServerPlayer jp = handler.getPlayer();
@@ -180,15 +181,23 @@ public class DonutMod implements ModInitializer {
                 Gui.say(jp, "§eMarkt: wegen wenig Arbeitsspeicher nur " + fmt(market.minAh) + " Angebote und " + fmt(market.minOrders)
                         + " Orders. Gib Minecraft im Launcher mehr RAM, dann wird er groesser.");
         });
-        ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> { boards.remove(handler.getPlayer().getUUID()); headBoards.remove(handler.getPlayer().getUUID()); });
+        ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> { IdleScreen.forget(handler.getPlayer().getUUID()); boards.remove(handler.getPlayer().getUUID()); headBoards.remove(handler.getPlayer().getUUID()); });
 
         ServerTickEvents.END_SERVER_TICK.register(server -> {
             int t = server.getTickCount();
             if (market != null) market.tick(t);
-            if (t % 40 == 0) Easter.tick(server);           // Easter Egg
+            if (t % 20 == 0) Easter.tick(server);           // Easter Egg: steigt jede Sekunde 1 Block
+            if (t % 5 == 0) IdleScreen.tick(server, t);     // 1 Min nichts gemacht -> "Made by WerIstDas88"
+            if (t % 5 == 0) ChestPreview.tick(server);       // Sell Axe: Kistenwert anzeigen
+            if (t % 20 == 0) Lang.update(server);           // Sprache folgt Minecraft
             if (t % 20 == 0) updateBoards(server);          // jede Sekunde Anzeige aktualisieren
             if (t % 6000 == 0) saveBalances();              // alle 5 Min speichern
             if (t % 1200 == 0) botCycle(server);          // jede Minute
+            if (Settings.botTick > 1) {                       // /bot tick <n>: im Schnitt genau n Handelsrunden pro Minute
+                botTradeAcc += Settings.botTick / 1200.0;
+                int r = (int) botTradeAcc;                    // bei grossem Tempo mehrere Runden pro Tick, gebuendelt
+                if (r >= 1) { botTradeAcc -= r; botTrade(server, r); }
+            } else botTradeAcc = 0;
             if (t % 36000 == 0) {                           // alle 30 Min neue Meta
                 meta.roll(META_POOL, 2, RND);
             }
@@ -219,12 +228,12 @@ public class DonutMod implements ModInitializer {
     // ---- Scoreboard (Sidebar rechts, mittig) ----
     void createBoard(ServerPlayer p) {
         Objective obj = new Scoreboard().addObjective("donutmod_money", ObjectiveCriteria.DUMMY,
-                Component.literal("§9§lDonutsmp"), ObjectiveCriteria.RenderType.INTEGER, false, BlankFormat.INSTANCE);
+                Lang.lit("§9§lDonutsmp"), ObjectiveCriteria.RenderType.INTEGER, false, BlankFormat.INSTANCE);
         boards.put(p.getUUID(), obj);
         p.connection.send(new ClientboundSetObjectivePacket(obj, 0));                 // 0 = erstellen
         if (Settings.hud(p.getUUID())) p.connection.send(new ClientboundSetDisplayObjectivePacket(DisplaySlot.SIDEBAR, obj));
         sendMoney(p, obj);
-        Objective head = new Scoreboard().addObjective("donutmod_head", ObjectiveCriteria.DUMMY, Component.literal(" "),
+        Objective head = new Scoreboard().addObjective("donutmod_head", ObjectiveCriteria.DUMMY, Lang.lit(" "),
                 ObjectiveCriteria.RenderType.INTEGER, false, BlankFormat.INSTANCE);
         headBoards.put(p.getUUID(), head);
         p.connection.send(new ClientboundSetObjectivePacket(head, 0));
@@ -236,14 +245,14 @@ public class DonutMod implements ModInitializer {
     void sendHeads(ServerPlayer viewer, Objective head, List<ServerPlayer> all) {
         for (ServerPlayer t : all)
             viewer.connection.send(new ClientboundSetScorePacket(t.getScoreboardName(), head.getName(), 0, Optional.empty(),
-                    Optional.of(new FixedFormat(Component.literal("§a$" + fmt(eco.get(t.getUUID())))))));
+                    Optional.of(new FixedFormat(Lang.lit("§a$" + fmt(eco.get(t.getUUID())))))));
     }
 
     void sendMoney(ServerPlayer p, Objective obj) {
         p.connection.send(new ClientboundSetScorePacket("money", obj.getName(), 1,
-                Optional.of(Component.literal("§eGeld: §a$" + fmt(eco.get(p.getUUID())))), Optional.of(BlankFormat.INSTANCE)));
+                Optional.of(Lang.lit("§eGeld: §a$" + fmt(eco.get(p.getUUID())))), Optional.of(BlankFormat.INSTANCE)));
         p.connection.send(new ClientboundSetScorePacket("info", obj.getName(), 0,
-                Optional.of(Component.literal("§9Economy")), Optional.of(BlankFormat.INSTANCE)));
+                Optional.of(Lang.lit("§9Economy")), Optional.of(BlankFormat.INSTANCE)));
     }
 
     /** Nach einer Aenderung in /settings: Geld-Anzeige und Name Tags fuer diesen Spieler ein-/ausblenden. */
@@ -274,7 +283,28 @@ public class DonutMod implements ModInitializer {
     final List<Item> pool = new ArrayList<>();
     static final String[] BAD = {"spawn_egg", "command_block", "structure_", "barrier", "light", "debug_stick", "jigsaw",
             "knowledge_book", "bedrock", "spawner", "test_", "trial_spawner", "vault", "farmland", "dirt_path",
-            "frogspawn", "budding_amethyst", "infested", "reinforced_deepslate", "petrified", "end_portal", "player_head"};
+            "frogspawn", "budding_amethyst", "infested", "reinforced_deepslate", "petrified", "end_portal", "player_head",
+            "splash_potion", "lingering_potion", "tipped_arrow"};   // keine Gift-/Schadens-Traenke (Effekt laesst sich nicht erkennen)
+
+    static final double BASE_MULT = 1.25;   // eingebauter Preisaufschlag; /opsettings-Faktor kommt obendrauf
+
+    /** Nach dem Laden: Faktoren aus /opsettings uebernehmen (ohne vorhandene Markt-Preise anzufassen, die sind gespeichert). */
+    void applyFactorsNoRescale() {
+        prices.priceMultiplier = BASE_MULT * Settings.priceFactor / 100.0;
+        orders.priceFactor = Settings.orderFactor / 100.0;
+    }
+
+    /** /opsettings: neue Prozentwerte setzen und vorhandene Bot-Angebote/-Orders im Markt um das Verhaeltnis neu/alt skalieren. */
+    void changeFactors(int newPrice, int newOrder) {
+        int oldP = Settings.priceFactor, oldO = Settings.orderFactor;
+        Settings.setFactors(newPrice, newOrder);
+        applyFactorsNoRescale();
+        double rp = (double) Settings.priceFactor / oldP;
+        double ro = rp * ((double) Settings.orderFactor / oldO);
+        if (rp != 1.0) ah.rescaleBots(rp);
+        if (ro != 1.0) orders.rescaleBots(ro);
+        if (market != null) { market.ahCache.clear(); market.ahCacheTime.clear(); market.ordersCache = null; }
+    }
 
     /** Items anderer Mods (nicht minecraft:/donutmod:). */
     static boolean isMod(String id) { return !(id.startsWith("minecraft:") || id.startsWith("donutmod:")); }
@@ -515,20 +545,30 @@ public class DonutMod implements ModInitializer {
 
     void botCycle(MinecraftServer server) {
         if (!Settings.bots) { prices.decay(); return; }   // /bot off: keine Bot-Kaeufe und keine Lieferungen
-        for (AuctionHouse.Listing l : ah.botBuyPlayerListings(RND)) {
+        if (Settings.botTick <= 1) botTrade(server, 1);   // bei /bot tick > 1 laufen Kaeufe/Lieferungen oefter (siehe Server-Tick)
+        prices.decay();
+        if (market != null) market.popDecay();
+        seedCustom();
+        if (market != null) market.ensureCustomOrders();
+    }
+
+    private double botTradeAcc = 0;
+
+    /** Bots kaufen Spieler-Angebote und liefern Spieler-Orders. Laeuft 1x pro Minute, bei /bot tick <n> n-mal pro Minute. */
+    void botTrade(MinecraftServer server, int rounds) {
+        if (!Settings.bots) return;
+        for (AuctionHouse.Listing l : ah.botBuyPlayerListings(RND, rounds)) {
             ItemStack st = ahItems.remove(l.id);
             if (market != null) market.ahRemoved(l);
             if (l.seller != null) {
                 ServerPlayer p = server.getPlayerList().getPlayer(l.seller);
                 if (p != null) {
-                    p.sendSystemMessage(Component.literal("§a[AH] Dein Angebot #" + l.id
+                    p.sendSystemMessage(Lang.lit("§a[AH] Dein Angebot #" + l.id
                             + (st != null ? " (" + st.getHoverName().getString() + ")" : "") + " wurde fuer $" + fmt(l.price) + " verkauft."));
                     ping(p, SoundEvents.PLAYER_LEVELUP, 1.0f);
                 }
             }
         }
-        prices.decay();
-        if (market != null) market.popDecay();
         // Spieler-Orders: Bots liefern langsam, in kleinen Portionen
         List<Orders.Order> mine = new ArrayList<>();
         for (Orders.Order o : orders.all()) if (o.owner != null) mine.add(o);
@@ -537,17 +577,18 @@ public class DonutMod implements ModInitializer {
             if (probe.isEmpty()) continue;
             double ratio = o.pricePerItem / Math.max(1.0, (double) prices.sellUnitPrice(o.itemId, o.enchants));
             double chance = Math.min(0.8, 0.05 * Math.pow(ratio, 3));
-            if (RND.nextDouble() < chance) {
+            // Bei mehreren Runden auf einmal: erwartete Anzahl Lieferungen k = Runden * Chance (zufaellig auf-/abgerundet)
+            int k = rounds <= 1 ? (RND.nextDouble() < chance ? 1 : 0) : (int) Math.floor(rounds * chance + RND.nextDouble());
+            if (k >= 1) {
                 // billige, leicht zu bekommende Items werden in riesigen Mengen geliefert (bis 500k/min), teure in kleinen
                 long sellP = Math.max(1, prices.sellUnitPrice(o.itemId, o.enchants));
                 long capPerMin = Math.max(100L, Math.min(500_000L, 200_000_000L / sellP));
-                int n = (int) Math.max(1, Math.min(capPerMin, Math.ceil(o.remaining * (0.01 + RND.nextDouble() * 0.02))));
+                double share = rounds <= 1 ? (0.01 + RND.nextDouble() * 0.02) : 1.0 - Math.pow(0.98, k);   // k Lieferungen mit je ~2 % vom Rest
+                int n = (int) Math.max(1, Math.min(capPerMin * k, Math.ceil(o.remaining * share)));
                 int d = orders.botDeliver(o, n);
                 if (d > 0) addPending(o.owner, buildStack(o.itemId, o.enchants, d));
             }
         }
-        seedCustom();
-        if (market != null) market.ensureCustomOrders();
     }
 
     // ---- Gelieferte Order-Items (zum Abholen) ----
@@ -561,7 +602,7 @@ public class DonutMod implements ModInitializer {
         while (left > 0) { int n = Math.min(left, max); l.add(st.copyWithCount(n)); left -= n; }
         if (srv != null) {
             ServerPlayer p = srv.getPlayerList().getPlayer(owner);
-            if (p != null) p.sendSystemMessage(Component.literal("§a[Orders] Lieferung: " + st.getCount() + "x "
+            if (p != null) p.sendSystemMessage(Lang.lit("§a[Orders] Lieferung: " + st.getCount() + "x "
                     + st.getHoverName().getString() + " - hole sie mit /orders claim ab."));
             if (p != null) ping(p, SoundEvents.EXPERIENCE_ORB_PICKUP, 1.3f);
         }
@@ -664,7 +705,7 @@ public class DonutMod implements ModInitializer {
                             if (!eco.take(from.getUUID(), amt))
                                 return msg(c, "§cNicht genug Geld. Du hast $" + fmt(eco.get(from.getUUID())) + ".");
                             eco.add(to.getUUID(), amt);
-                            to.sendSystemMessage(Component.literal("§a" + from.getName().getString() + " hat dir $" + fmt(amt) + " gesendet."));
+                            to.sendSystemMessage(Lang.lit("§a" + from.getName().getString() + " hat dir $" + fmt(amt) + " gesendet."));
                             return msg(c, "§aDu hast $" + fmt(amt) + " an " + to.getName().getString() + " gesendet.");
                         }))));
 
@@ -686,13 +727,20 @@ public class DonutMod implements ModInitializer {
         d.register(Commands.literal("opsettings").requires(isOp).executes(c -> { Gui.openOpSettings(this, c.getSource().getPlayerOrException()); return 1; }));
         // /bot: on | off | create order <item> <preis> [menge] | create ah <item> <preis> [menge]   (nur OP)
         d.register(Commands.literal("bot").requires(isOp)
-                .executes(c -> msg(c, "§eBots: " + (Settings.bots ? "§aAN" : "§cAUS") + " §7| Angebote: " + fmt(ah.size()) + ", Orders: " + fmt(orders.size())))
+                .executes(c -> msg(c, "§eBots: " + (Settings.bots ? "§aAN" : "§cAUS") + " §7| Angebote: " + fmt(ah.size()) + ", Orders: " + fmt(orders.size()) + " §7| Tempo: " + Settings.botTick + "x"))
                 .then(Commands.literal("on").executes(c -> { Settings.setBots(true); return msg(c, "§aBots: AN (Angebote und Orders füllen sich wieder)"); }))
                 .then(Commands.literal("off").executes(c -> {
                     Settings.setBots(false);
                     removeBots(id -> true);
                     return msg(c, "§cBots: AUS (alle Bot-Angebote und Bot-Orders entfernt)");
                 }))
+                .then(Commands.literal("tick")
+                        .executes(c -> msg(c, "§eBot-Tempo: §f" + Settings.botTick + "x"))
+                        .then(Commands.argument("tempo", IntegerArgumentType.integer(1, Settings.MAX_TICK)).executes(c -> {
+                            int n = IntegerArgumentType.getInteger(c, "tempo");
+                            Settings.setBotTick(n);
+                            return msg(c, "§aBot-Tempo: §f" + n + "x §a(Bots kaufen und liefern " + n + "-mal schneller)");
+                        })))
                 .then(Commands.literal("create")
                         .then(Commands.literal("order").then(Commands.argument("item", StringArgumentType.word())
                                 .suggests((ctx, sb) -> SharedSuggestionProvider.suggest(itemPaths(), sb))
@@ -706,6 +754,16 @@ public class DonutMod implements ModInitializer {
                                         .executes(c -> botCreateAh(c, 1))
                                         .then(Commands.argument("menge", IntegerArgumentType.integer(1))
                                                 .executes(c -> botCreateAh(c, IntegerArgumentType.getInteger(c, "menge")))))))));
+
+        // /spawner tick <n>: Spawner sammeln n-mal schneller (nur OP)
+        d.register(Commands.literal("spawner").requires(isOp)
+                .then(Commands.literal("tick")
+                        .executes(c -> msg(c, "§eSpawner-Tempo: §f" + Settings.spawnerTick + "x"))
+                        .then(Commands.argument("tempo", IntegerArgumentType.integer(1, Settings.MAX_TICK)).executes(c -> {
+                            int n = IntegerArgumentType.getInteger(c, "tempo");
+                            Settings.setSpawnerTick(n);
+                            return msg(c, "§aSpawner-Tempo: §f" + n + "x §a(Spawner sammeln " + n + "-mal schneller)");
+                        }))));
 
         d.register(Commands.literal("mod").requires(isOp)
                 .executes(c -> msg(c, "§eMod-Items: " + (Settings.modItems ? "§aAN" : "§cAUS")))
@@ -817,7 +875,7 @@ public class DonutMod implements ModInitializer {
             default -> { if (amt >= cur) eco.add(u, amt - cur); else eco.take(u, cur - amt); }
         }
         ServerPlayer on = srv == null ? null : srv.getPlayerList().getPlayer(u);
-        if (on != null) on.sendSystemMessage(Component.literal("§eDein Kontostand: §a$" + fmt(eco.get(u))));
+        if (on != null) on.sendSystemMessage(Lang.lit("§eDein Kontostand: §a$" + fmt(eco.get(u))));
         return msg(c, "§aKontostand von " + names.getOrDefault(u, n) + ": $" + fmt(eco.get(u)));
     }
 
@@ -914,7 +972,7 @@ public class DonutMod implements ModInitializer {
     }
 
     static int msg(CommandContext<CommandSourceStack> c, String s) {
-        c.getSource().sendSuccess(() -> Component.literal(s), false);
+        c.getSource().sendSuccess(() -> Lang.lit(s), false);
         return 1;
     }
 }

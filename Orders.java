@@ -6,7 +6,7 @@ public class Orders {
     public static final class Order {
         public final int id; public final UUID owner; // owner == null -> Bot
         public final String itemId; public final Map<String, Integer> enchants;
-        public int remaining; public final long pricePerItem;
+        public int remaining; public long pricePerItem;
         public boolean removed;
         Order(int id, UUID owner, String itemId, Map<String, Integer> ench, int amount, long ppi) {
             this.id = id; this.owner = owner; this.itemId = itemId; this.enchants = ench;
@@ -68,11 +68,21 @@ public class Orders {
         return out;
     }
 
+    /** Zusaetzlicher Faktor fuer neue Bot-Order-Preise (/opsettings: Order-Preise). */
+    public double priceFactor = 1.0;
+
+    /** Skaliert die Preise aller Bot-Orders (Spieler-Orders bleiben unveraendert). */
+    public int rescaleBots(double ratio) {
+        int n = 0;
+        for (Order o : orders) if (o.owner == null) { o.pricePerItem = Math.max(1, Math.round(o.pricePerItem * ratio)); n++; }
+        return n;
+    }
+
     /** Bot-Order: Preis 1.0-1.5x Sell-Preis, bei Meta nur runter (Faktor). */
     public Order botOrder(String itemId, Map<String, Integer> ench, int amount, Random rnd) {
         double f = 1.0 + rnd.nextDouble() * 0.5;
         if (meta.isMeta(itemId)) f *= meta.orderPriceFactor;
-        long ppi = Math.round(prices.sellUnitPrice(itemId, ench) * f);
+        long ppi = Math.max(1, Math.round(prices.sellUnitPrice(itemId, ench) * f * priceFactor));
         Order o = new Order(nextId++, null, itemId, ench, amount, ppi);
         add(o);
         return o;

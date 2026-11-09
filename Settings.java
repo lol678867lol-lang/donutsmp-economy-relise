@@ -22,6 +22,17 @@ public final class Settings {
     static boolean bots = true;
     /** /fakebase on|off: automatische Fake-Basen (Stashes/Farmen) unter der Erde. */
     static boolean fakeBases = true;
+    /** Idle-Screen "Made by WerIstDas88" nach 1 Minute ohne Bewegung. */
+    static boolean idleScreen = true;
+    /** /bot tick <n>: Bots kaufen und liefern n-mal schneller (1 = normal). */
+    static int botTick = 1;
+    /** /spawner tick <n>: Spawner sammeln n-mal schneller (1 = normal). */
+    static int spawnerTick = 1;
+    static final int MAX_TICK = 999_999;
+    /** /opsettings: Preise aller Items in Prozent (100 = normal) und zusaetzlich nur die Bot-Order-Preise. */
+    static int priceFactor = 100;
+    static int orderFactor = 100;
+    static int clampPct(int v) { return Math.max(1, Math.min(100_000, v)); }
     /** Pro Spieler: [0] = Geld-Anzeige (Sidebar), [1] = Money Name Tags (Geld unter dem Namen). */
     private static final Map<UUID, boolean[]> PLAYERS = new HashMap<>();
 
@@ -35,6 +46,10 @@ public final class Settings {
     static void setMods(boolean v) { modItems = v; save(); }
     static void setBots(boolean v) { bots = v; save(); }
     static void setFakeBases(boolean v) { fakeBases = v; save(); }
+    static void setIdle(boolean v) { idleScreen = v; save(); }
+    static void setBotTick(int v) { botTick = Math.max(1, Math.min(MAX_TICK, v)); save(); }
+    static void setFactors(int price, int order) { priceFactor = clampPct(price); orderFactor = clampPct(order); save(); }
+    static void setSpawnerTick(int v) { spawnerTick = Math.max(1, Math.min(MAX_TICK, v)); save(); }
 
     static java.nio.file.Path file() { return DonutMod.worldDir().resolve("donutmod-settings.json"); }
 
@@ -44,6 +59,11 @@ public final class Settings {
         modItems = true;
         bots = true;
         fakeBases = true;
+        idleScreen = true;
+        botTick = 1;
+        spawnerTick = 1;
+        priceFactor = 100;
+        orderFactor = 100;
         try {
             if (!Files.exists(file())) return;
             JsonObject o = JsonParser.parseString(Files.readString(file())).getAsJsonObject();
@@ -51,6 +71,11 @@ public final class Settings {
             if (o.has("modItems")) modItems = o.get("modItems").getAsBoolean();
             if (o.has("bots")) bots = o.get("bots").getAsBoolean();
             if (o.has("fakeBases")) fakeBases = o.get("fakeBases").getAsBoolean();
+            if (o.has("idleScreen")) idleScreen = o.get("idleScreen").getAsBoolean();
+            if (o.has("botTick")) botTick = Math.max(1, Math.min(MAX_TICK, o.get("botTick").getAsInt()));
+            if (o.has("priceFactor")) priceFactor = clampPct(o.get("priceFactor").getAsInt());
+            if (o.has("orderFactor")) orderFactor = clampPct(o.get("orderFactor").getAsInt());
+            if (o.has("spawnerTick")) spawnerTick = Math.max(1, Math.min(MAX_TICK, o.get("spawnerTick").getAsInt()));
             if (o.has("players"))
                 for (var e : o.getAsJsonObject("players").entrySet()) {
                     JsonObject v = e.getValue().getAsJsonObject();
@@ -67,6 +92,11 @@ public final class Settings {
             o.addProperty("modItems", modItems);
             o.addProperty("bots", bots);
             o.addProperty("fakeBases", fakeBases);
+            o.addProperty("idleScreen", idleScreen);
+            o.addProperty("botTick", botTick);
+            o.addProperty("spawnerTick", spawnerTick);
+            o.addProperty("priceFactor", priceFactor);
+            o.addProperty("orderFactor", orderFactor);
             JsonObject pl = new JsonObject();
             for (var e : PLAYERS.entrySet()) {
                 JsonObject v = new JsonObject();

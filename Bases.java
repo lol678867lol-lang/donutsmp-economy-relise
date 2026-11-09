@@ -107,9 +107,8 @@ public final class Bases {
                     .then(Commands.literal("on").executes(c -> { Settings.setFakeBases(true); return DonutMod.msg(c, "§aFake-Basen: AN (entstehen wieder automatisch)"); }))
                     .then(Commands.literal("off").executes(c -> { Settings.setFakeBases(false); return DonutMod.msg(c, "§cFake-Basen: AUS (es entstehen keine neuen, bestehende bleiben)"); }))
                     .then(Commands.literal("spawn")
-                            .then(Commands.literal("stash").executes(c -> spawnHere(c, 1)))
-                            .then(Commands.literal("farm").executes(c -> spawnHere(c, 2)))
-                            .then(Commands.literal("bigstash").executes(c -> spawnHere(c, 3)))));
+                            .then(typeNode("stash", 1)).then(typeNode("farm", 2))
+                            .then(typeNode("bigstash", 3)).then(typeNode("base", 4))));
             d.register(Commands.literal("nearbase").requires(isOp).executes(c -> {
                 ServerPlayer p = c.getSource().getPlayerOrException();
                 int ci = Math.floorDiv((int) p.getX(), SPACING), cj = Math.floorDiv((int) p.getZ(), SPACING);
@@ -198,40 +197,75 @@ public final class Bases {
         return false;
     }
 
-    static void generate(DonutMod m, ServerLevel level, Random r, int bx, int bz) { generate(m, level, r, bx, bz, 0); }
+    static void generate(DonutMod m, ServerLevel level, Random r, int bx, int bz) { generate(m, level, r, bx, bz, 0, 0); }
 
-    /** Treibt eine Basis; mode: 0 = zufaellig, 1 = stash, 2 = farm, 3 = bigstash. Rueckgabe: Boden-y, oder Integer.MIN_VALUE wenn es nicht ging. */
-    static int generate(DonutMod m, ServerLevel level, Random r, int bx, int bz, int mode) {
-        boolean farm = mode == 0 ? r.nextInt(100) < 40 : mode == 2;
-        boolean rare = mode == 0 ? (!farm && r.nextInt(100) < 15) : mode == 3;
-        int sx = farm ? 25 : 21, sz = farm ? 21 : 15;   // deutlich groessere Basen
-        FORCE_BIG = mode == 3;
+    static boolean FORCE_BIG = false;
+    static boolean CUR_NETH = true;    // Stufe der Basis, die gerade gebaut wird (Netherite oder Diamant, nie gemischt)
+    static boolean LAST_NETH = true;   // Stufe der zuletzt fertig gebauten Basis
+
+    /**
+     * Baut eine Basis. mode: 0 = zufaellig, 1 = stash, 2 = farm, 3 = bigstash, 4 = base (zufaellig Stash oder Farm).
+     * tier: 0 = zufaellig, 1 = netherite, 2 = diamant. Rueckgabe: Boden-y, oder Integer.MIN_VALUE wenn es nicht ging.
+     */
+    static int generate(DonutMod m, ServerLevel level, Random r, int bx, int bz, int mode, int tier) {
+        boolean farm, big;
+        if (mode == 0) { farm = r.nextInt(100) < 40; big = !farm && r.nextInt(100) < 15; }
+        else if (mode == 4) { farm = r.nextInt(100) < 40; big = false; }
+        else { farm = mode == 2; big = mode == 3; }
+        boolean neth = tier == 1 || (tier == 0 && r.nextBoolean());
+        int sx = farm ? 25 : (big ? 45 : 21), sz = farm ? 21 : 15;   // Big-Stash: breiterer Raum = mehr Kisten
+        FORCE_BIG = big && mode == 3;
+        CUR_NETH = neth;
         try {
             for (int attempt = 0; attempt < 16; attempt++) {
                 int y0 = -46 + r.nextInt(27);   // Boden zwischen y=-46 und y=-20, also immer unter -8
                 // keine Fluessigkeit (Wasser/Lava) im Bereich inkl. 2 Bloecken Rand
                 if (hasFluid(level, bx - 2, y0 - 2, bz - 2, bx + sx + 1, y0 + 7, bz + sz + 1)) continue;
                 if (farm) buildFarm(m, level, r, bx, y0, bz, sx, sz);
-                else buildStash(m, level, r, bx, y0, bz, sx, sz, rare);
+                else buildStash(m, level, r, bx, y0, bz, sx, sz, big, neth);
+                LAST_NETH = neth;
                 return y0;
             }
         } finally { FORCE_BIG = false; }
         return Integer.MIN_VALUE;
     }
 
-    static boolean FORCE_BIG = false;
-
-    static int spawnHere(com.mojang.brigadier.context.CommandContext<CommandSourceStack> c, int mode) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+    static int spawnHere(com.mojang.brigadier.context.CommandContext<CommandSourceStack> c, int mode, int tier, Integer cx, Integer cz) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
         ServerPlayer p = c.getSource().getPlayerOrException();
         Level lv = p.level();
         if (!(lv instanceof ServerLevel level) || !level.dimension().equals(Level.OVERWORLD)) return DonutMod.msg(c, "§cNur in der Overworld.");
         DonutMod m = DonutMod.INSTANCE;
         if (m == null || m.enchList.isEmpty()) return DonutMod.msg(c, "§cNoch nicht bereit, versuch es gleich nochmal.");
-        int bx = (int) p.getX() + 2, bz = (int) p.getZ() + 2;
-        int y = generate(m, level, new Random(), bx, bz, mode);
-        String name = mode == 1 ? "Stash" : mode == 2 ? "Farm" : "Big-Stash";
+        int bx = cx != null ? cx : (int) p.getX() + 2, bz = cz != null ? cz : (int) p.getZ() + 2;   // ohne Koordinaten: neben dir
+        int y = generate(m, level, new Random(), bx, bz, mode, tier);
+        String name = mode == 1 ? "Stash" : mode == 2 ? "Farm" : mode == 3 ? "Big-Stash" : "Base";
         if (y == Integer.MIN_VALUE) return DonutMod.msg(c, "§cHier ging es nicht (Wasser oder Lava im Weg). Geh ein Stück weiter.");
-        return DonutMod.msg(c, "§aFake-" + name + " gebaut: X=" + bx + " Z=" + bz + ", Boden y=" + y + " (unter dir).");
+        return DonutMod.msg(c, "§aFake-" + name + (LAST_NETH ? " (Netherite)" : " (Diamant)") + " gebaut: X=" + bx + " Z=" + bz + ", Boden y=" + y + (cx != null ? "." : " (unter dir)."));
+    }
+
+    /** /fakebase spawn <typ> [netherite|dia] [x z] - ohne Koordinaten wird neben dir gebaut. */
+    static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> typeNode(String name, int mode) {
+        return Commands.literal(name)
+                .executes(c -> spawnHere(c, mode, 0, null, null))
+                .then(coords(mode, 0))
+                .then(tierNode("netherite", mode, 1))
+                .then(tierNode("dia", mode, 2))
+                .then(tierNode("diamond", mode, 2));
+    }
+
+    static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> tierNode(String lit, int mode, int tier) {
+        return Commands.literal(lit)
+                .executes(c -> spawnHere(c, mode, tier, null, null))
+                .then(coords(mode, tier));
+    }
+
+    /** x und z (absolute Blockkoordinaten, Ecke der Basis). */
+    static com.mojang.brigadier.builder.RequiredArgumentBuilder<CommandSourceStack, Integer> coords(int mode, int tier) {
+        return Commands.argument("x", com.mojang.brigadier.arguments.IntegerArgumentType.integer(-29_999_000, 29_999_000))
+                .then(Commands.argument("z", com.mojang.brigadier.arguments.IntegerArgumentType.integer(-29_999_000, 29_999_000))
+                        .executes(c -> spawnHere(c, mode, tier,
+                                com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(c, "x"),
+                                com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(c, "z"))));
     }
 
     static void room(ServerLevel level, int x0, int y0, int z0, int sx, int sz) {
@@ -263,29 +297,22 @@ public final class Bases {
         Spawners.registerAt(level, p, type, stackFor(r));
     }
 
-    static void buildStash(DonutMod m, ServerLevel level, Random r, int x0, int y0, int z0, int sx, int sz, boolean rare) {
+    /** Stash: Kisten an den Waenden, Loot nach Sorte sortiert (eine Sorte pro Kiste), nur Netherite ODER nur Diamant. */
+    static void buildStash(DonutMod m, ServerLevel level, Random r, int x0, int y0, int z0, int sx, int sz, boolean big, boolean neth) {
         room(level, x0, y0, z0, sx, sz);
         // Saeulen als Deko
         for (int x = x0 + 4; x < x0 + sx - 2; x += 4)
             for (int z : new int[]{z0 + 5, z0 + 9}) fill(level, x, y0 + 1, z, x, y0 + 4, z, WALL);
+        // Kisten: erst die ganze Nordwand, dann die Suedwand (so liegen zusammengehoerige Kisten nebeneinander)
+        int per = (sx - 1) / 2;   // 10 Kisten pro Wand im Stash, 22 im Big-Stash (44 Kisten)
         List<BlockPos> chests = new ArrayList<>();
-        if (rare) {
-            for (int i = 0; i < 4; i++) chests.addAll(placeDouble(level, new BlockPos(x0 + 3 + i * 5, y0 + 1, z0), Direction.SOUTH));
-        } else {
-            for (int i = 0; i < 10; i++) {
-                chests.add(placeSingle(level, new BlockPos(x0 + 1 + i * 2, y0 + 1, z0), Direction.SOUTH));
-                chests.add(placeSingle(level, new BlockPos(x0 + 1 + i * 2, y0 + 1, z0 + sz - 1), Direction.NORTH));
-            }
-        }
+        for (int i = 0; i < per; i++) chests.add(placeSingle(level, new BlockPos(x0 + 1 + i * 2, y0 + 1, z0), Direction.SOUTH));
+        for (int i = 0; i < per; i++) chests.add(placeSingle(level, new BlockPos(x0 + 1 + i * 2, y0 + 1, z0 + sz - 1), Direction.NORTH));
         String[] types = {"skeleton", "zombified_piglin", "iron_golem", "creeper", "zombie", "spider"};
         int spawners = 2 + r.nextInt(3);   // 2 bis 4 Spawner
         for (int i = 0; i < spawners; i++)
             spawner(level, new BlockPos(x0 + sx - 2, y0 + 1, z0 + 3 + i * 3), types[r.nextInt(types.length)], r);
-        List<ItemStack> items = new ArrayList<>();
-        int lists = rare ? 6 : 3;   // viel mehr Loot als vorher
-        for (int i = 0; i < lists; i++) items.addAll(loot(m, pickLot(r), r));
-        distribute(level, chests, items, r);
-        if (rare) fillRest(level, chests, r);
+        sortedLoot(m, level, r, chests, neth, big);
     }
 
     /** Grosse Redstone-Farm: 4 Reihen mit Kolben, Observern und Leitungen, Hopper-Baender mit Kisten, Spawner und Loot hinten. */
@@ -330,9 +357,112 @@ public final class Bases {
         List<BlockPos> chests = new ArrayList<>();
         for (int x : new int[]{x0 + 8, x0 + 10, x0 + 12, x0 + 14, x0 + 16})
             chests.add(placeSingle(level, new BlockPos(x, y0 + 1, z0 + sz - 1), Direction.NORTH));
-        List<ItemStack> all = new ArrayList<>();
-        for (int i = 0; i < 2; i++) all.addAll(loot(m, pickLot(r), r));
-        distribute(level, chests, all, r);
+        sortedLoot(m, level, r, chests, CUR_NETH, false);   // sortiert, nur eine Stufe
+    }
+
+    // ---------- Sortierter Loot ----------
+    static List<ItemStack> many(int n, Supplier<ItemStack> f) {
+        List<ItemStack> g = new ArrayList<>();
+        for (int i = 0; i < n; i++) { ItemStack s = f.get(); if (!s.isEmpty()) g.add(s); }
+        return g;
+    }
+
+    /** total Stueck als Stacks (jeweils bis zur maximalen Stapelgroesse). */
+    static List<ItemStack> stacks(net.minecraft.world.item.Item it, int total) {
+        List<ItemStack> g = new ArrayList<>();
+        int max = Math.max(1, new ItemStack(it).getMaxStackSize());
+        while (total > 0) { int n = Math.min(max, total); g.add(new ItemStack(it, n)); total -= n; }
+        return g;
+    }
+
+    /** 5 bis 50 Stueck. */
+    static int n550(Random r) { return 5 + r.nextInt(46); }
+
+    /** 5 bis 50 Stueck oder ein voller Stack (50:50); Items, die nicht stapelbar sind, immer 5 bis 50. */
+    static int amt(Random r, int max) { return max <= 1 || r.nextBoolean() ? n550(r) : max; }
+
+    /**
+     * Fuellt die Kisten sortiert: jede Sorte bekommt eigene Kisten (Helme, Brustplatten, Hosen, Schuhe, Schwerter, Aexte,
+     * Spitzhacken, ...), jedes Teil 5 bis 50 mal. Nur Netherite ODER nur Diamant. OP-Gaps: Diamant 1-5, Netherite 20-640.
+     */
+    static void sortedLoot(DonutMod m, ServerLevel level, Random r, List<BlockPos> chests, boolean neth, boolean big) {
+        String mat = neth ? "netherite" : "diamond";
+        List<List<ItemStack>> g = new ArrayList<>();
+        for (String part : new String[]{"helmet", "chestplate", "leggings", "boots"}) {
+            boolean legs = part.equals("leggings") || part.equals("boots");
+            g.add(many(n550(r), () -> legs && r.nextInt(4) == 0
+                    ? gear(m, mat + "_" + part, "blast_protection", 4, "unbreaking", 3, "mending", 1)
+                    : gear(m, mat + "_" + part, "protection", 4, "unbreaking", 3, "mending", 1)));
+        }
+        g.add(many(n550(r), () -> gear(m, mat + "_sword", "sharpness", 5, "unbreaking", 3, "fire_aspect", 2, "mending", 1)));
+        g.add(many(n550(r), () -> gear(m, mat + "_axe", "sharpness", 5, "efficiency", 5, "unbreaking", 3, "mending", 1)));
+        g.add(many(n550(r), () -> gear(m, mat + "_pickaxe", "efficiency", 5, "silk_touch", 1, "unbreaking", 3, "mending", 1)));
+        g.add(stacks(Items.ENCHANTED_GOLDEN_APPLE, neth ? 20 + r.nextInt(621) : 1 + r.nextInt(5)));   // OP-Gaps
+        g.add(many(n550(r), () -> gear(m, mat + "_spear", "sharpness", 5, "lunge", 3, "unbreaking", 3, "fire_aspect", 2, "mending", 1)));
+        g.add(many(n550(r), () -> gear(m, "mace", "wind_burst", 3, "density", 5, "unbreaking", 3, "mending", 1)));
+        g.add(many(n550(r), () -> gear(m, "shield", "unbreaking", 3, "mending", 1)));
+        if (neth) g.add(many(n550(r), () -> gear(m, "elytra", "unbreaking", 3, "mending", 1)));
+        g.add(stacks(Items.TOTEM_OF_UNDYING, n550(r)));
+        g.add(stacks(Items.GOLDEN_APPLE, amt(r, 64)));
+        g.add(stacks(Items.ENDER_PEARL, amt(r, 16)));
+        // nur hilfreiche Traenke - keine Gift-, Schadens- oder Schwaeche-Traenke
+        g.add(many(n550(r), () -> potion(Potions.STRONG_STRENGTH)));
+        g.add(many(n550(r), () -> potion(Potions.STRONG_SWIFTNESS)));
+        g.add(many(n550(r), () -> potion(Potions.LONG_FIRE_RESISTANCE)));
+        g.add(stacks(Items.END_CRYSTAL, amt(r, 64)));
+        g.add(stacks(Items.EXPERIENCE_BOTTLE, amt(r, 64)));
+        g.add(stacks(Items.OBSIDIAN, amt(r, 64)));
+        g.add(stacks(Items.COBWEB, amt(r, 64)));
+        g.add(stacks(Items.RESPAWN_ANCHOR, amt(r, 64)));
+        g.add(stacks(Items.GLOWSTONE, amt(r, 64)));
+        g.add(many(1 + r.nextInt(3), () -> rockets(r)));
+        fillSorted(level, chests, g);
+    }
+
+    /** Jede Gruppe kommt in eigene Kisten (der Reihe nach); passt etwas nicht mehr, wird es weggelassen. */
+    static void fillSorted(ServerLevel level, List<BlockPos> chests, List<List<ItemStack>> groups) {
+        int ci = 0;
+        for (List<ItemStack> grp : groups) {
+            int i = 0;
+            while (i < grp.size() && ci < chests.size()) {
+                BlockEntity be = level.getBlockEntity(chests.get(ci));
+                ci++;
+                if (!(be instanceof ChestBlockEntity c)) continue;
+                for (int slot = 0; slot < 27 && i < grp.size(); slot++) c.setItem(slot, grp.get(i++));
+                c.setChanged();
+            }
+            if (ci >= chests.size()) break;
+        }
+    }
+
+    // ---------- Bot-Orders fuer Basen-Loot ----------
+    record LootOrder(String id, Map<String, Integer> ench, int amount) {}
+
+    static Map<String, Integer> ench(Object... kv) {
+        Map<String, Integer> e = new LinkedHashMap<>();
+        for (int i = 0; i + 1 < kv.length; i += 2) e.put("minecraft:" + kv[i], (Integer) kv[i + 1]);
+        return e;
+    }
+
+    /** Zufaellige Order auf Dinge, die in Basen liegen (Netherite-/Diamant-Ruestung und -Waffen, Gaps, Totems ...). */
+    static LootOrder lootOrder(Random r) {
+        String mat = r.nextBoolean() ? "netherite" : "diamond";
+        switch (r.nextInt(14)) {
+            case 0 -> { return new LootOrder("minecraft:" + mat + "_helmet", ench("protection", 4, "unbreaking", 3, "mending", 1), 1 + r.nextInt(8)); }
+            case 1 -> { return new LootOrder("minecraft:" + mat + "_chestplate", ench("protection", 4, "unbreaking", 3, "mending", 1), 1 + r.nextInt(8)); }
+            case 2 -> { return new LootOrder("minecraft:" + mat + "_leggings", ench(r.nextInt(4) == 0 ? "blast_protection" : "protection", 4, "unbreaking", 3, "mending", 1), 1 + r.nextInt(8)); }
+            case 3 -> { return new LootOrder("minecraft:" + mat + "_boots", ench(r.nextInt(4) == 0 ? "blast_protection" : "protection", 4, "unbreaking", 3, "mending", 1), 1 + r.nextInt(8)); }
+            case 4 -> { return new LootOrder("minecraft:" + mat + "_sword", ench("sharpness", 5, "unbreaking", 3, "fire_aspect", 2, "mending", 1), 1 + r.nextInt(6)); }
+            case 5 -> { return new LootOrder("minecraft:" + mat + "_axe", ench("sharpness", 5, "efficiency", 5, "unbreaking", 3, "mending", 1), 1 + r.nextInt(6)); }
+            case 6 -> { return new LootOrder("minecraft:" + mat + "_pickaxe", ench("efficiency", 5, "silk_touch", 1, "unbreaking", 3, "mending", 1), 1 + r.nextInt(6)); }
+            case 7 -> { return new LootOrder("minecraft:enchanted_golden_apple", Map.of(), 8 + r.nextInt(121)); }
+            case 8 -> { return new LootOrder("minecraft:golden_apple", Map.of(), 16 + r.nextInt(241)); }
+            case 9 -> { return new LootOrder("minecraft:totem_of_undying", Map.of(), 4 + r.nextInt(61)); }
+            case 10 -> { return new LootOrder("minecraft:ender_pearl", Map.of(), 16 + r.nextInt(241)); }
+            case 11 -> { return new LootOrder("minecraft:obsidian", Map.of(), 64 + r.nextInt(449)); }
+            case 12 -> { return new LootOrder("minecraft:end_crystal", Map.of(), 16 + r.nextInt(113)); }
+            default -> { return new LootOrder("minecraft:experience_bottle", Map.of(), 64 + r.nextInt(449)); }
+        }
     }
 
     // ---------- Loot ----------

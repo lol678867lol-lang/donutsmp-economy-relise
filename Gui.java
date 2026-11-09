@@ -44,7 +44,7 @@ public final class Gui {
     private Gui() {}
 
     // ---------- Hilfen ----------
-    static Component t(String s) { return Component.literal(s).withStyle(st -> st.withItalic(false)); }
+    static Component t(String s) { return Lang.lit(s).withStyle(st -> st.withItalic(false)); }
 
     static ItemStack named(Item item, String name, String... lore) {
         ItemStack s = new ItemStack(item);
@@ -65,7 +65,7 @@ public final class Gui {
         return new ItemLore(l);
     }
 
-    static void say(ServerPlayer p, String s) { p.sendSystemMessage(Component.literal(s)); }
+    static void say(ServerPlayer p, String s) { p.sendSystemMessage(Lang.lit(s)); }
 
     static ItemStack pane() { return named(Items.GRAY_STAINED_GLASS_PANE, " "); }
 
@@ -244,7 +244,7 @@ public final class Gui {
             render();
             p.openMenu(new SimpleMenuProvider((id, inv, pl) ->
                     new Menu(id, inv, box, true, Set.<Integer>of(), (s, sp) -> click(s, sp), null, null),
-                    Component.literal(title)));
+                    Lang.lit(title)));
         }
     }
 
@@ -573,7 +573,7 @@ public final class Gui {
                 new Menu(id, inv, box, false, Set.of(53),
                         (slot, sp) -> { sellAll(m, box, sp); refresh.run(); },
                         refresh, sp -> sellAll(m, box, sp)),
-                Component.literal("Sell - Items reinlegen")));
+                Lang.lit("Sell - Items reinlegen")));
     }
 
     static List<Stack> collect(SimpleContainer box) {
@@ -638,7 +638,7 @@ public final class Gui {
                     else if (slot == 24) { Settings.setTags(u, !Settings.tags(u)); m.applyBoards(sp); }
                     render.run();
                 }, null, null),
-                Component.literal("Settings")));
+                Lang.lit("Settings")));
     }
 
     static void openOpSettings(DonutMod m, ServerPlayer p) {
@@ -651,6 +651,21 @@ public final class Gui {
                     "§7(bestehende bleiben).", "§7(gleich wie /fakebase on|off)"));
             box.setItem(24, toggle(Settings.modItems, "Mod-Items", "§7Aus = Items anderer Mods werden nicht verkauft",
                     "§7und sind nicht in /ah und Orders.", "§7(gleich wie /mod on|off)"));
+            box.setItem(29, toggle(Settings.idleScreen, "Idle-Screen", "§7Nach 1 Minute ohne Bewegung erscheint",
+                    "§7\"Made by WerIstDas88\" - bei Bewegung weg."));
+            box.setItem(31, named(Items.GOLD_INGOT, "§6Preise ändern", "§7Alle Items mit Preis. Klick auf ein Item", "§7ändert seinen Preis.", "", "§eKlick: öffnen"));
+            // Alle Preise in Prozent (Zeile 5)
+            box.setItem(36, named(Items.RED_STAINED_GLASS_PANE, "§cAlle Preise -10 %"));
+            box.setItem(37, named(Items.LIME_STAINED_GLASS_PANE, "§aAlle Preise +10 %"));
+            box.setItem(38, named(Items.GOLD_BLOCK, "§6Alle Preise: §f" + Settings.priceFactor + " %", "§7100 % = normal", "§7Gilt für alle Items, auch die Bot-Angebote", "§7und Bot-Orders im Markt."));
+            box.setItem(39, named(Items.COMPASS, "§bEigener Wert", "§7Prozent tippen, z.B. 150 oder +25 / -30"));
+            box.setItem(40, named(Items.BARRIER, "§eZurücksetzen (100 %)"));
+            // Order-Preise in Prozent (Zeile 6)
+            box.setItem(45, named(Items.RED_STAINED_GLASS_PANE, "§cOrder-Preise -10 %"));
+            box.setItem(46, named(Items.LIME_STAINED_GLASS_PANE, "§aOrder-Preise +10 %"));
+            box.setItem(47, named(Items.EMERALD_BLOCK, "§6Order-Preise: §f" + Settings.orderFactor + " %", "§7100 % = normal", "§7Gilt nur für Bot-Orders (zusätzlich zu den", "§7allgemeinen Preisen)."));
+            box.setItem(48, named(Items.COMPASS, "§bEigener Wert", "§7Prozent tippen, z.B. 150 oder +25 / -30"));
+            box.setItem(49, named(Items.BARRIER, "§eZurücksetzen (100 %)"));
         };
         render.run();
         p.openMenu(new SimpleMenuProvider((id, inv, pl) ->
@@ -661,8 +676,17 @@ public final class Gui {
                         if (!on) m.removeBots(x -> true);
                     } else if (slot == 22) Settings.setFakeBases(!Settings.fakeBases);
                     else if (slot == 24) m.setModItems(!Settings.modItems);
+                    else if (slot == 29) Settings.setIdle(!Settings.idleScreen);
+                    else if (slot == 31) { PriceEditor.openList(m, sp, ""); return; }
+                    else if (slot == 36) m.changeFactors(Settings.priceFactor - 10, Settings.orderFactor);
+                    else if (slot == 37) m.changeFactors(Settings.priceFactor + 10, Settings.orderFactor);
+                    else if (slot == 40) m.changeFactors(100, Settings.orderFactor);
+                    else if (slot == 45) m.changeFactors(Settings.priceFactor, Settings.orderFactor - 10);
+                    else if (slot == 46) m.changeFactors(Settings.priceFactor, Settings.orderFactor + 10);
+                    else if (slot == 49) m.changeFactors(Settings.priceFactor, 100);
+                    else if (slot == 39 || slot == 48) { PriceEditor.askPercent(m, sp, slot == 39); return; }
                     render.run();
                 }, null, null),
-                Component.literal("OP-Settings")));
+                Lang.lit("OP-Settings")));
     }
 }
