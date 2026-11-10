@@ -25,6 +25,18 @@ public class AuctionHouse {
         return l;
     }
 
+    /** Skaliert die Bot-Angebote bestimmter Items (id -> Faktor) in einem Durchlauf. */
+    public int rescaleBotsFor(Map<String, Double> ratios) {
+        if (ratios.isEmpty()) return 0;
+        int n = 0;
+        for (Listing l : listings) {
+            if (l.seller != null) continue;
+            Double r = ratios.get(l.stack.id());
+            if (r != null) { l.price = Math.max(1, Math.round(l.price * r)); n++; }
+        }
+        return n;
+    }
+
     /** Skaliert die Preise aller Bot-Angebote (Spieler-Angebote bleiben unveraendert). */
     public int rescaleBots(double ratio) {
         int n = 0;

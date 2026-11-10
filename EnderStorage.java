@@ -81,7 +81,7 @@ public final class EnderStorage {
             }
             d.migrated.addAll(MIGRATED);
             DonutMod.writeSafe(file(), GSON.toJson(d));
-        } catch (Exception e) { System.err.println("[DonutMod] Ender Chest speichern fehlgeschlagen: " + e); }
+        } catch (Exception e) { System.err.println("[Donutsmp Economy] Ender Chest speichern fehlgeschlagen: " + e); }
     }
 
     static void load() {
@@ -101,6 +101,6 @@ public final class EnderStorage {
                 }
                 BOXES.put(UUID.fromString(e.getKey()), box);
             }
-        } catch (Exception e) { System.err.println("[DonutMod] Ender Chest laden fehlgeschlagen: " + e); }
+        } catch (Exception e) { System.err.println("[Donutsmp Economy] Ender Chest laden fehlgeschlagen: " + e); }
     }
 }

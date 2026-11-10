@@ -21,6 +21,9 @@ final class Easter {
     static final int MAX_Y = 318;                       // hoechste Schild-Hoehe (Bauhoehe 320)
     private static int signY = Integer.MIN_VALUE;       // aktuelle Hoehe des Schilds (unbekannt = MIN_VALUE)
 
+    /** Beim Start einer Welt: Schild-Hoehe vergessen (wird neu gesucht). */
+    static void reset() { signY = Integer.MIN_VALUE; }
+
     /** Jede Sekunde aufrufen. Bewegt sich nur, solange ein Spieler (waagerecht) innerhalb von 64 Bloecken ist. */
     static void tick(MinecraftServer server) {
         for (ServerPlayer p : server.getPlayerList().getPlayers()) {

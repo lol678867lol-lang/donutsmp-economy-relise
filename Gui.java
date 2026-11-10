@@ -2,6 +2,7 @@ package de.donutmod.fabric;
 
 import de.donutmod.core.AuctionHouse;
 import de.donutmod.core.Orders;
+import de.donutmod.core.Sat;
 import de.donutmod.core.Stack;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.chat.Component;
@@ -335,7 +336,7 @@ public final class Gui {
                     return withLore(base,
                             "§7Zahlt: §a$" + DonutMod.fmt(o.pricePerItem) + " §7pro Stück",
                             "§7Gesucht: §f" + DonutMod.fmt(o.remaining) + " Stück",
-                            "§7Gesamt: §a$" + DonutMod.fmt(o.pricePerItem * o.remaining),
+                            "§7Gesamt: §a$" + DonutMod.fmt(Sat.mul(o.pricePerItem, o.remaining)),
                             "§7Besteller: §f" + (o.owner == null ? "Server" : own ? "Du" : m.playerName(o.owner)), "",
                             own ? "§eKlick: Order abbrechen (Geld zurück)" : "§aKlick: passende Items aus deinem Inventar liefern");
                 },
@@ -375,7 +376,7 @@ public final class Gui {
 
     static void deliver(DonutMod m, ServerPlayer pl, Orders.Order o) {
         if (pl.getUUID().equals(o.owner)) {
-            long back = o.pricePerItem * o.remaining;
+            long back = Sat.mul(o.pricePerItem, o.remaining);
             if (m.orders.cancel(o)) { m.market.ordersRemoved(o); say(pl, "§eOrder abgebrochen, $" + DonutMod.fmt(back) + " zurück."); }
             return;
         }
@@ -653,7 +654,11 @@ public final class Gui {
                     "§7und sind nicht in /ah und Orders.", "§7(gleich wie /mod on|off)"));
             box.setItem(29, toggle(Settings.idleScreen, "Idle-Screen", "§7Nach 1 Minute ohne Bewegung erscheint",
                     "§7\"Made by WerIstDas88\" - bei Bewegung weg."));
-            box.setItem(31, named(Items.GOLD_INGOT, "§6Preise ändern", "§7Alle Items mit Preis. Klick auf ein Item", "§7ändert seinen Preis.", "", "§eKlick: öffnen"));
+            box.setItem(31, named(Items.GOLD_INGOT, "§6Preise ändern", "§7Alle Items mit Sell-Preis und AH-Preis.", "§7Klick auf ein Item ändert den Sell-Preis", "§7(der AH-Preis folgt daraus).", "", "§eKlick: öffnen"));
+            box.setItem(30, PricesReset.button(p.getUUID()));
+            box.setItem(33, named(Items.ENDER_CHEST, "§6Basen-Höhe: §fy " + Settings.baseYMin + " bis " + Settings.baseYMax, "§7Boden der neuen Fake-Basen", "§7Klick: Bereich eintippen (z.B. -40 -20)"));
+            box.setItem(34, named(Items.RED_STAINED_GLASS_PANE, "§cBasen 5 tiefer"));
+            box.setItem(35, named(Items.LIME_STAINED_GLASS_PANE, "§aBasen 5 höher"));
             // Alle Preise in Prozent (Zeile 5)
             box.setItem(36, named(Items.RED_STAINED_GLASS_PANE, "§cAlle Preise -10 %"));
             box.setItem(37, named(Items.LIME_STAINED_GLASS_PANE, "§aAlle Preise +10 %"));
@@ -678,6 +683,10 @@ public final class Gui {
                     else if (slot == 24) m.setModItems(!Settings.modItems);
                     else if (slot == 29) Settings.setIdle(!Settings.idleScreen);
                     else if (slot == 31) { PriceEditor.openList(m, sp, ""); return; }
+                    else if (slot == 30) PricesReset.click(m, sp);
+                    else if (slot == 34) Settings.setBaseY(Settings.baseYMin - 5, Settings.baseYMax - 5);
+                    else if (slot == 35) Settings.setBaseY(Settings.baseYMin + 5, Settings.baseYMax + 5);
+                    else if (slot == 33) { PriceEditor.askHeight(m, sp); return; }
                     else if (slot == 36) m.changeFactors(Settings.priceFactor - 10, Settings.orderFactor);
                     else if (slot == 37) m.changeFactors(Settings.priceFactor + 10, Settings.orderFactor);
                     else if (slot == 40) m.changeFactors(100, Settings.orderFactor);

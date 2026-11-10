@@ -171,7 +171,7 @@ public class DonutMod implements ModInitializer {
         OrderBuilder.register(this);
         PriceEditor.register(this);
 
-        ServerLifecycleEvents.SERVER_STARTED.register(server -> { srv = server; resetState(); Tpa.BY_TARGET.clear(); Hoppers.TRACKED.clear(); OrderBuilder.AWAIT.clear(); loadBalances(); loadNames(); Settings.load(); applyFactorsNoRescale(); initEnchants(); PriceFile.loadInto(prices); Custom.registerPrices(prices); initItems(); loadMarket(); market = new Market(this); market.init(); seedCustom(); market.ensureCustomOrders(); });
+        ServerLifecycleEvents.SERVER_STARTED.register(server -> { srv = server; resetState(); Tpa.BY_TARGET.clear(); Hoppers.TRACKED.clear(); OrderBuilder.AWAIT.clear(); loadBalances(); loadNames(); Settings.load(); PricePropagation.reset(); Easter.reset(); applyFactorsNoRescale(); initEnchants(); PriceFile.loadInto(prices); Custom.registerPrices(prices); initItems(); loadMarket(); market = new Market(this); market.init(); seedCustom(); market.ensureCustomOrders(); });
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> saveBalances());
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
             ServerPlayer jp = handler.getPlayer();
@@ -212,7 +212,7 @@ public class DonutMod implements ModInitializer {
             Map<String, Long> out = new HashMap<>();
             eco.snapshot().forEach((u, v) -> out.put(u.toString(), v));
             writeSafe(saveFile(), GSON.toJson(out));
-        } catch (Exception e) { System.err.println("[DonutMod] Speichern fehlgeschlagen: " + e); }
+        } catch (Exception e) { System.err.println("[Donutsmp Economy] Speichern fehlgeschlagen: " + e); }
     }
 
     void loadBalances() {
@@ -222,7 +222,7 @@ public class DonutMod implements ModInitializer {
             Map<UUID, Long> data = new HashMap<>();
             if (in != null) in.forEach((k, v) -> data.put(UUID.fromString(k), v));
             eco.load(data);
-        } catch (Exception e) { System.err.println("[DonutMod] Laden fehlgeschlagen: " + e); }
+        } catch (Exception e) { System.err.println("[Donutsmp Economy] Laden fehlgeschlagen: " + e); }
     }
 
     // ---- Scoreboard (Sidebar rechts, mittig) ----
@@ -404,7 +404,7 @@ public class DonutMod implements ModInitializer {
                 if (!l.isEmpty()) sm.storage.put(e.getKey().toString(), l);
             }
             writeSafe(marketFile(), GSON.toJson(sm));
-        } catch (Exception e) { System.err.println("[DonutMod] Markt speichern fehlgeschlagen: " + e); }
+        } catch (Exception e) { System.err.println("[Donutsmp Economy] Markt speichern fehlgeschlagen: " + e); }
     }
 
     void loadMarket() {
@@ -425,7 +425,7 @@ public class DonutMod implements ModInitializer {
                 for (String enc : e.getValue()) { ItemStack st = decodeStack(enc); if (!st.isEmpty()) l.add(st); }
                 if (!l.isEmpty()) pending.put(UUID.fromString(e.getKey()), l);
             }
-        } catch (Exception e) { System.err.println("[DonutMod] Markt laden fehlgeschlagen: " + e); }
+        } catch (Exception e) { System.err.println("[Donutsmp Economy] Markt laden fehlgeschlagen: " + e); }
     }
 
     static Path namesFile() { return worldDir().resolve("donutmod-names.json"); }
@@ -443,7 +443,7 @@ public class DonutMod implements ModInitializer {
             Map<String, String> out = new HashMap<>();
             names.forEach((u, n) -> out.put(u.toString(), n));
             writeSafe(namesFile(), GSON.toJson(out));
-        } catch (Exception e) { System.err.println("[DonutMod] Namen speichern fehlgeschlagen: " + e); }
+        } catch (Exception e) { System.err.println("[Donutsmp Economy] Namen speichern fehlgeschlagen: " + e); }
     }
 
     void loadNames() {
@@ -451,7 +451,7 @@ public class DonutMod implements ModInitializer {
             if (!Files.exists(namesFile())) return;
             Map<String, String> in = GSON.fromJson(Files.readString(namesFile()), new TypeToken<Map<String, String>>() {}.getType());
             if (in != null) in.forEach((k, v) -> names.put(UUID.fromString(k), v));
-        } catch (Exception e) { System.err.println("[DonutMod] Namen laden fehlgeschlagen: " + e); }
+        } catch (Exception e) { System.err.println("[Donutsmp Economy] Namen laden fehlgeschlagen: " + e); }
     }
 
     String idOf(Item it) { return idCache.computeIfAbsent(it, k -> BuiltInRegistries.ITEM.getKey(k).toString()); }
@@ -467,7 +467,8 @@ public class DonutMod implements ModInitializer {
 
     static boolean isShulker(ItemStack st) { return !st.isEmpty() && idOfStatic(st).endsWith("shulker_box"); }
 
-    static void ping(ServerPlayer p, SoundEvent s, float pitch) { p.level().playSound(null, p.blockPosition(), s, SoundSource.PLAYERS, 0.8f, pitch); }
+    /** Ton nur fuer diesen Spieler (andere hoeren z.B. den Kauf-Ton im Auktionshaus nicht). */
+    static void ping(ServerPlayer p, SoundEvent s, float pitch) { p.playNotifySound(s, SoundSource.PLAYERS, 0.8f, pitch); }
 
     /** Wie oft ein Item gleichzeitig vorkommen darf: teure/seltene Items nur 1-60 mal (Drachenei: 1x). */
     int cap(String id) {
@@ -725,7 +726,7 @@ public class DonutMod implements ModInitializer {
         // /settings (jeder), /opsettings und /mod on|off (nur OP)
         d.register(Commands.literal("settings").executes(c -> { Gui.openSettings(this, c.getSource().getPlayerOrException()); return 1; }));
         d.register(Commands.literal("opsettings").requires(isOp).executes(c -> { Gui.openOpSettings(this, c.getSource().getPlayerOrException()); return 1; }));
-        // /bot: on | off | create order <item> <preis> [menge] | create ah <item> <preis> [menge]   (nur OP)
+        // /bot: on | off | speed <n> | create order <item> <preis> [menge] | create ah <item> <preis> [menge]   (nur OP)
         d.register(Commands.literal("bot").requires(isOp)
                 .executes(c -> msg(c, "§eBots: " + (Settings.bots ? "§aAN" : "§cAUS") + " §7| Angebote: " + fmt(ah.size()) + ", Orders: " + fmt(orders.size()) + " §7| Tempo: " + Settings.botTick + "x"))
                 .then(Commands.literal("on").executes(c -> { Settings.setBots(true); return msg(c, "§aBots: AN (Angebote und Orders füllen sich wieder)"); }))
@@ -734,7 +735,7 @@ public class DonutMod implements ModInitializer {
                     removeBots(id -> true);
                     return msg(c, "§cBots: AUS (alle Bot-Angebote und Bot-Orders entfernt)");
                 }))
-                .then(Commands.literal("tick")
+                .then(Commands.literal("speed")
                         .executes(c -> msg(c, "§eBot-Tempo: §f" + Settings.botTick + "x"))
                         .then(Commands.argument("tempo", IntegerArgumentType.integer(1, Settings.MAX_TICK)).executes(c -> {
                             int n = IntegerArgumentType.getInteger(c, "tempo");
@@ -755,9 +756,9 @@ public class DonutMod implements ModInitializer {
                                         .then(Commands.argument("menge", IntegerArgumentType.integer(1))
                                                 .executes(c -> botCreateAh(c, IntegerArgumentType.getInteger(c, "menge")))))))));
 
-        // /spawner tick <n>: Spawner sammeln n-mal schneller (nur OP)
+        // /spawner speed <n>: Spawner sammeln n-mal schneller (nur OP)
         d.register(Commands.literal("spawner").requires(isOp)
-                .then(Commands.literal("tick")
+                .then(Commands.literal("speed")
                         .executes(c -> msg(c, "§eSpawner-Tempo: §f" + Settings.spawnerTick + "x"))
                         .then(Commands.argument("tempo", IntegerArgumentType.integer(1, Settings.MAX_TICK)).executes(c -> {
                             int n = IntegerArgumentType.getInteger(c, "tempo");
@@ -850,7 +851,7 @@ public class DonutMod implements ModInitializer {
                             int amount = (int) am;
                             String id = toStack(h).id();
                             Orders.Order o = orders.playerOrder(p.getUUID(), id, toStack(h).enchants(), amount, ppi);
-                            if (o == null) return msg(c, "§cNicht genug Geld. Du brauchst $" + fmt(ppi * amount) + ".");
+                            if (o == null) return msg(c, "§cNicht genug Geld. Du brauchst $" + fmt(Sat.mul(ppi, amount)) + ".");
                             return msg(c, "§aOrder #" + o.id + " erstellt: " + amount + "x " + h.getHoverName().getString()
                                     + " für je $" + fmt(ppi) + " (bezahlt: $" + fmt(ppi * amount) + ")");
                         }))))

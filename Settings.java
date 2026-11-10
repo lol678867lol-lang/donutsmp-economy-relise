@@ -30,6 +30,19 @@ public final class Settings {
     static int spawnerTick = 1;
     static final int MAX_TICK = 999_999;
     /** /opsettings: Preise aller Items in Prozent (100 = normal) und zusaetzlich nur die Bot-Order-Preise. */
+    /** Boden-Hoehe (y) der neuen Fake-Basen: zufaellig zwischen baseYMin und baseYMax. */
+    static int baseYMin = -46, baseYMax = -20;
+    static final int BASE_Y_LOW = -60, BASE_Y_HIGH = 300;
+    private static void setBaseYNoSave() {
+        int a = Math.max(BASE_Y_LOW, Math.min(BASE_Y_HIGH, Math.min(baseYMin, baseYMax)));
+        int b = Math.max(BASE_Y_LOW, Math.min(BASE_Y_HIGH, Math.max(baseYMin, baseYMax)));
+        baseYMin = a; baseYMax = b;
+    }
+    static void setBaseY(int min, int max) {
+        int a = Math.max(BASE_Y_LOW, Math.min(BASE_Y_HIGH, Math.min(min, max)));
+        int b = Math.max(BASE_Y_LOW, Math.min(BASE_Y_HIGH, Math.max(min, max)));
+        baseYMin = a; baseYMax = b; save();
+    }
     static int priceFactor = 100;
     static int orderFactor = 100;
     static int clampPct(int v) { return Math.max(1, Math.min(100_000, v)); }
@@ -64,6 +77,8 @@ public final class Settings {
         spawnerTick = 1;
         priceFactor = 100;
         orderFactor = 100;
+        baseYMin = -46;
+        baseYMax = -20;
         try {
             if (!Files.exists(file())) return;
             JsonObject o = JsonParser.parseString(Files.readString(file())).getAsJsonObject();
@@ -73,6 +88,7 @@ public final class Settings {
             if (o.has("fakeBases")) fakeBases = o.get("fakeBases").getAsBoolean();
             if (o.has("idleScreen")) idleScreen = o.get("idleScreen").getAsBoolean();
             if (o.has("botTick")) botTick = Math.max(1, Math.min(MAX_TICK, o.get("botTick").getAsInt()));
+            if (o.has("baseYMin") && o.has("baseYMax")) { baseYMin = o.get("baseYMin").getAsInt(); baseYMax = o.get("baseYMax").getAsInt(); setBaseYNoSave(); }
             if (o.has("priceFactor")) priceFactor = clampPct(o.get("priceFactor").getAsInt());
             if (o.has("orderFactor")) orderFactor = clampPct(o.get("orderFactor").getAsInt());
             if (o.has("spawnerTick")) spawnerTick = Math.max(1, Math.min(MAX_TICK, o.get("spawnerTick").getAsInt()));
@@ -82,7 +98,7 @@ public final class Settings {
                     PLAYERS.put(UUID.fromString(e.getKey()), new boolean[]{
                             !v.has("hud") || v.get("hud").getAsBoolean(), !v.has("tags") || v.get("tags").getAsBoolean()});
                 }
-        } catch (Exception e) { System.err.println("[DonutMod] Einstellungen laden fehlgeschlagen: " + e); }
+        } catch (Exception e) { System.err.println("[Donutsmp Economy] Einstellungen laden fehlgeschlagen: " + e); }
     }
 
     static void save() {
@@ -95,6 +111,8 @@ public final class Settings {
             o.addProperty("idleScreen", idleScreen);
             o.addProperty("botTick", botTick);
             o.addProperty("spawnerTick", spawnerTick);
+            o.addProperty("baseYMin", baseYMin);
+            o.addProperty("baseYMax", baseYMax);
             o.addProperty("priceFactor", priceFactor);
             o.addProperty("orderFactor", orderFactor);
             JsonObject pl = new JsonObject();
@@ -106,6 +124,6 @@ public final class Settings {
             }
             o.add("players", pl);
             DonutMod.writeSafe(file(), new GsonBuilder().setPrettyPrinting().create().toJson(o));
-        } catch (Exception e) { System.err.println("[DonutMod] Einstellungen speichern fehlgeschlagen: " + e); }
+        } catch (Exception e) { System.err.println("[Donutsmp Economy] Einstellungen speichern fehlgeschlagen: " + e); }
     }
 }

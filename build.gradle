@@ -3,7 +3,7 @@ plugins {
 }
 version = project.mod_version
 group = 'de.donutmod'
-base { archivesName = 'donutmod' }
+base { archivesName = 'Donutsmp-Economy' }
 
 loom {
     accessWidenerPath = file('donutmod.accesswidener')

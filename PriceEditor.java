@@ -59,10 +59,12 @@ final class PriceEditor {
         Gui.ListGui<String> g = new Gui.ListGui<>(m, p, "Preise: " + (filter.isEmpty() ? "alle" : filter),
                 () -> ids,
                 id -> Gui.withLore(m.buildStack(id, Map.of(), 1),
-                        "§7Preis: §a$" + DonutMod.fmt(m.prices.unitPrice(id, Map.of())),
-                        "§eKlick: Preis ändern"),
+                        "§7Sell-Preis: §a$" + DonutMod.fmt(m.prices.sellUnitPrice(id, Map.of())),
+                        "§7AH-Preis: §6$" + DonutMod.fmt(m.prices.unitPrice(id, Map.of())),
+                        "§eKlick: Sell-Preis ändern"),
                 (id, pl) -> edit(m, pl, id, filter));
         g.extra(47, () -> Gui.named(Items.COMPASS, "§bSuche", "§7Klick: Item im Chat suchen"), () -> search(m, p));
+        g.extra(50, () -> PricesReset.button(p.getUUID()), () -> PricesReset.click(m, p));
         g.extra(51, () -> Gui.named(Items.BARRIER, "§cZurück"), () -> Gui.openOpSettings(m, p));
         g.open();
     }
@@ -77,13 +79,14 @@ final class PriceEditor {
     }
 
     private static void edit(DonutMod m, ServerPlayer p, String id, String filter) {
-        long cur = m.prices.unitPrice(id, Map.of());
-        ask(p, "§eNeuer Preis für §f" + id + " §e(aktuell $" + DonutMod.fmt(cur) + "). Tippe ihn in den Chat, z.B. 1.5k, 2m. 'abbrechen' bricht ab.", in -> {
+        long cur = m.prices.sellUnitPrice(id, Map.of());
+        ask(p, "§eNeuer Sell-Preis für §f" + id + " §e(aktuell $" + DonutMod.fmt(cur) + "). Tippe ihn in den Chat, z.B. 1.5k, 2m. 'abbrechen' bricht ab.", in -> {
             if (cancel(in)) { openList(m, p, filter); return; }
             long v = DonutMod.parseAmount(in);
             if (v <= 0) { Gui.say(p, "§cUngültiger Preis. Beispiele: 500, 1.5k, 2m, 3b"); openList(m, p, filter); return; }
-            setPrice(m, id, v);
-            Gui.say(p, "§aPreis von §f" + id + " §agesetzt auf $" + DonutMod.fmt(v));
+            int n = setPrice(m, id, v);
+            Gui.say(p, "§aSell-Preis von §f" + id + " §agesetzt auf $" + DonutMod.fmt(v) + " §7(AH: $" + DonutMod.fmt(m.prices.unitPrice(id, Map.of())) + ")"
+                    + (n > 0 ? " §7(+" + n + " abhängige Items angepasst)" : ""));
             openList(m, p, filter);
         });
     }
@@ -104,6 +107,22 @@ final class PriceEditor {
         });
     }
 
+    /** Hoehenbereich der Fake-Basen per Chat: "von bis", z.B. "-40 -20". */
+    static void askHeight(DonutMod m, ServerPlayer p) {
+        ask(p, "§eTippe die Höhe (y) als \"von bis\" in den Chat, z.B. -40 -20 (erlaubt: -60 bis 300). 'abbrechen' bricht ab.", in -> {
+            if (!cancel(in)) {
+                String[] parts = in.trim().replace(",", " ").replace(" bis ", " ").trim().split("\\s+");
+                try {
+                    int a = Integer.parseInt(parts[0]), b = Integer.parseInt(parts.length > 1 ? parts[1] : parts[0]);
+                    if (Math.min(a, b) < Settings.BASE_Y_LOW || Math.max(a, b) > Settings.BASE_Y_HIGH) throw new NumberFormatException();
+                    Settings.setBaseY(a, b);
+                    Gui.say(p, "§aBasen-Höhe: y " + Settings.baseYMin + " bis " + Settings.baseYMax);
+                } catch (Exception e) { Gui.say(p, "§cUngültig. Beispiel: -40 -20 (zwischen -60 und 300)."); }
+            }
+            Gui.openOpSettings(m, p);
+        });
+    }
+
     /** -1 bei ungueltiger Eingabe. */
     static int parsePercent(String in, int current) {
         String s = in.trim().replace("%", "").replace(",", ".");
@@ -113,10 +132,14 @@ final class PriceEditor {
         } catch (NumberFormatException e) { return -1; }
     }
 
-    /** Setzt den Preis, den das Item im Markt hat (Basispreis = Preis / globaler Faktor) und speichert ihn. */
-    static void setPrice(DonutMod m, String id, long price) {
-        long base = Math.max(1, Math.round(price / m.prices.priceMultiplier));
-        m.prices.setBase(id, base);
-        PriceFile.set(id, base);
+    /**
+     * Setzt den SELL-Preis (das, was /sell pro Stueck zahlt). Der AH-Preis ergibt sich daraus (Sell-Preis / sellFactor).
+     * Abhaengige Items ziehen mit. Rueckgabe: Anzahl mitgezogener Items.
+     */
+    static int setPrice(DonutMod m, String id, long sellPrice) {
+        m.prices.resetFactor(id);   // Nachfrage-Abschlag/-Aufschlag weg, damit genau der eingetippte Sell-Preis gilt
+        double perBase = Math.max(1e-9, m.prices.priceMultiplier * m.prices.sellFactor);
+        long base = Math.max(1, Math.round(sellPrice / perBase));
+        return PricePropagation.set(m, id, base);
     }
 }

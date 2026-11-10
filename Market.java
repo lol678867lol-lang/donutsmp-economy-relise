@@ -53,7 +53,7 @@ public final class Market {
         maxAh = (long) (minAh * capFactor);
         maxOrders = (long) (minOrders * capFactor);
         reduced = scale < 0.999 || Perf.LITE;
-        System.out.println("[DonutMod] Markt-Ziel: " + minAh + " Angebote, " + minOrders + " Orders (RAM-Faktor " + String.format("%.2f", scale) + ")");
+        System.out.println("[Donutsmp Economy] Markt-Ziel: " + minAh + " Angebote, " + minOrders + " Orders (RAM-Faktor " + String.format("%.2f", scale) + ")");
         for (Item it : m.pool) pop.put(m.idOf(it), 1.0);
         for (AuctionHouse.Listing l : m.ah.all()) if (l.stack.enchants().isEmpty()) ahCount.merge(l.stack.id(), 1, Integer::sum);
         for (Orders.Order o : m.orders.all()) if (o.enchants.isEmpty()) orderCount.merge(o.itemId, 1, Integer::sum);

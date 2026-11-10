@@ -235,7 +235,7 @@ public final class Spawners {
 
     static void save() {
         try { DonutMod.writeSafe(file(), GSON.toJson(new ArrayList<>(MAP.values()))); }
-        catch (Exception e) { System.err.println("[DonutMod] Spawner speichern fehlgeschlagen: " + e); }
+        catch (Exception e) { System.err.println("[Donutsmp Economy] Spawner speichern fehlgeschlagen: " + e); }
     }
 
     static void load() {
@@ -246,7 +246,7 @@ public final class Spawners {
             Sp[] arr = GSON.fromJson(Files.readString(file()), Sp[].class);
             MAP.clear();
             if (arr != null) for (Sp s : arr) if (s != null && s.dim != null) MAP.put(key(s.dim, s.x, s.y, s.z), s);
-        } catch (Exception e) { System.err.println("[DonutMod] Spawner laden fehlgeschlagen: " + e); }
+        } catch (Exception e) { System.err.println("[Donutsmp Economy] Spawner laden fehlgeschlagen: " + e); }
     }
 
     // ---------- Menue ----------

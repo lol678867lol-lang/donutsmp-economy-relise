@@ -1,5 +1,7 @@
 package de.donutmod.fabric;
 
+import de.donutmod.core.Sat;
+
 import de.donutmod.core.Orders;
 import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;
 import net.minecraft.core.Holder;
@@ -136,7 +138,7 @@ public final class OrderBuilder {
         }
         if (d.avail.size() > 17) box.setItem(44, Gui.named(Items.ARROW, "§eWeitere Verzauberungen", "§7Seite " + (d.epage + 1) + "/" + ((d.avail.size() + 16) / 17)));
         box.setItem(45, Gui.named(Items.BARRIER, "§cAbbrechen"));
-        box.setItem(49, Gui.named(Items.GOLD_BLOCK, "§6Gesamt: §a$" + DonutMod.fmt(d.price * d.amount),
+        box.setItem(49, Gui.named(Items.GOLD_BLOCK, "§6Gesamt: §a$" + DonutMod.fmt(Sat.mul(d.price, d.amount)),
                 "§7Wird dir beim Erstellen abgezogen", "§7(Rückzahlung bei Abbruch)"));
         box.setItem(53, Gui.named(Items.LIME_CONCRETE, "§aOrder erstellen"));
     }
@@ -205,7 +207,7 @@ public final class OrderBuilder {
         if (slot == 45) Gui.openOrders(m, p);
         if (slot == 53) {
             if (!DonutMod.allowed(d.id)) { Gui.say(p, "§cItems anderer Mods sind ausgeschaltet (/mod on)."); return; }
-            long total = d.price * d.amount;
+            long total = Sat.mul(d.price, d.amount);
             Orders.Order o = m.orders.playerOrder(p.getUUID(), d.id, new HashMap<>(d.ench), (int) d.amount, d.price);
             if (o == null) { Gui.say(p, "§cNicht genug Geld. Du brauchst $" + DonutMod.fmt(total) + "."); return; }
             DonutMod.ping(p, SoundEvents.EXPERIENCE_ORB_PICKUP, 1.0f);

@@ -16,7 +16,7 @@ public class SellService {
             Orders.Order o = orders.bestFor(s);
             if (o != null) {
                 int n = Math.min(o.remaining, s.count());
-                total += o.pricePerItem * n + prices.sellUnitPrice(s) * (s.count() - n);
+                total = Sat.add(total, Sat.add(Sat.mul(o.pricePerItem, n), Sat.mul(prices.sellUnitPrice(s), s.count() - n)));
             } else total += prices.sellStackPrice(s);
         }
         return total;

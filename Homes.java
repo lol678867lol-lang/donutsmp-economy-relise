@@ -113,7 +113,7 @@ public final class Homes {
             Map<String, Map<String, Home>> out = new HashMap<>();
             DATA.forEach((u, m) -> out.put(u.toString(), m));
             DonutMod.writeSafe(file(), GSON.toJson(out));
-        } catch (Exception e) { System.err.println("[DonutMod] Homes speichern fehlgeschlagen: " + e); }
+        } catch (Exception e) { System.err.println("[Donutsmp Economy] Homes speichern fehlgeschlagen: " + e); }
     }
 
     static void load() {
@@ -124,7 +124,7 @@ public final class Homes {
                     new TypeToken<Map<String, Map<String, Home>>>() {}.getType());
             DATA.clear();
             if (in != null) in.forEach((k, v) -> DATA.put(UUID.fromString(k), new LinkedHashMap<>(v)));
-        } catch (Exception e) { System.err.println("[DonutMod] Homes laden fehlgeschlagen: " + e); }
+        } catch (Exception e) { System.err.println("[Donutsmp Economy] Homes laden fehlgeschlagen: " + e); }
     }
 
     static void register() {

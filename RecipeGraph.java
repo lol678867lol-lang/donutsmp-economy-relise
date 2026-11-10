@@ -21,7 +21,33 @@ public class RecipeGraph {
 
     public RecipeGraph(Function<String, Long> fixed, ToLongFunction<String> raw) { this.fixed = fixed; this.raw = raw; }
 
-    public void add(Recipe r) { byOut.computeIfAbsent(r.out(), k -> new ArrayList<>()).add(r); memo.clear(); }
+    public void add(Recipe r) { byOut.computeIfAbsent(r.out(), k -> new ArrayList<>()).add(r); memo.clear(); reverse = null; }
+    public void clearMemo() { memo.clear(); }
+
+    private Map<String, Set<String>> reverse;   // Zutat -> Items, die damit gecraftet werden
+
+    /**
+     * Alle Items, deren Preis (ueber Rezepte, auch mehrstufig) von id abhaengt. Bei Items, fuer die stopAt wahr ist
+     * (feste Preise), hoert die Suche auf: ihr Preis aendert sich nicht und reicht die Aenderung nicht weiter.
+     */
+    public Set<String> dependentsOf(String id, java.util.function.Predicate<String> stopAt) {
+        if (reverse == null) {
+            reverse = new HashMap<>();
+            for (List<Recipe> rs : byOut.values())
+                for (Recipe r : rs)
+                    for (Ing ing : r.ings())
+                        for (String o : ing.options()) reverse.computeIfAbsent(o, k -> new HashSet<>()).add(r.out());
+        }
+        Set<String> seen = new HashSet<>();
+        Deque<String> q = new ArrayDeque<>();
+        q.add(id);
+        while (!q.isEmpty()) {
+            String x = q.poll();
+            for (String d : reverse.getOrDefault(x, Set.of()))
+                if (!d.equals(id) && seen.add(d) && !stopAt.test(d)) q.add(d);
+        }
+        return seen;
+    }
     public boolean has(String id) { return byOut.containsKey(id); }
     public int size() { return byOut.size(); }
 

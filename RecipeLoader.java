@@ -40,8 +40,8 @@ final class RecipeLoader {
                     parse(JsonParser.parseReader(r).getAsJsonObject(), g);
                 } catch (Exception ignored) { /* unbekanntes oder kaputtes Rezept ueberspringen */ }
             }
-        } catch (Exception ex) { System.err.println("[DonutMod] Rezepte lesen fehlgeschlagen: " + ex); }
-        System.out.println("[DonutMod] Rezepte fuer Preise: " + g.size() + " Items");
+        } catch (Exception ex) { System.err.println("[Donutsmp Economy] Rezepte lesen fehlgeschlagen: " + ex); }
+        System.out.println("[Donutsmp Economy] Rezepte fuer Preise: " + g.size() + " Items");
     }
 
     private static void parse(JsonObject o, RecipeGraph g) {

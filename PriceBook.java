@@ -30,7 +30,15 @@ public class PriceBook {
 
     public double factorOf(String id) { return factor.getOrDefault(id, 1.0); }
 
+    /** Nachfrage-Faktor eines Items auf normal (1.0) zuruecksetzen. */
+    public void resetFactor(String id) { factor.remove(id); }
+
+    /** Alle Nachfrage-Faktoren zuruecksetzen (z.B. nach zu viel Verkaufen). */
+    public void resetFactors() { factor.clear(); }
+
     public void setBase(String id, long price) { base.put(id, price); }
+    /** Gesetzter Basispreis oder null. */
+    public Long baseOf(String id) { return base.get(id); }
     public void setEnchantValue(String enchantId, long perLevel) { enchantValue.put(enchantId, perLevel); }
 
     /** Preis für EIN Item inkl. Verzauberungen. */
@@ -46,8 +54,8 @@ public class PriceBook {
         return Math.max(1, Math.round(unitPrice(id, enchants) * sellFactor));
     }
     public long sellUnitPrice(Stack s) { return sellUnitPrice(s.id(), s.enchants()); }
-    public long sellStackPrice(Stack s) { return sellUnitPrice(s) * s.count(); }
+    public long sellStackPrice(Stack s) { return Sat.mul(sellUnitPrice(s), s.count()); }
 
     public long unitPrice(Stack s) { return unitPrice(s.id(), s.enchants()); }
-    public long stackPrice(Stack s) { return unitPrice(s) * s.count(); }
+    public long stackPrice(Stack s) { return Sat.mul(unitPrice(s), s.count()); }
 }

@@ -33,14 +33,28 @@ public class PriceFile {
             Map.entry("minecraft:dragon_egg", 5_000_000L),
             Map.entry("minecraft:netherite_upgrade_smithing_template", 400_000L));
 
-    static Path file() { return FabricLoader.getInstance().getConfigDir().resolve("donutmod-prices-v8.json"); }
+    /** Preisliste PRO WELT (im Weltordner), damit jede Welt eigene Preise hat. */
+    static Path file() { return DonutMod.worldDir().resolve("donutmod-prices-v8.json"); }
 
     public static void loadInto(PriceBook prices) {
         try {
             if (!Files.exists(file())) generate();
             Map<String, Long> m = new Gson().fromJson(Files.readString(file()), new TypeToken<Map<String, Long>>() {}.getType());
             if (m != null) m.forEach((id, price) -> prices.setBase(id, price));
-        } catch (Exception e) { System.err.println("[DonutMod] Preisliste fehlgeschlagen: " + e); }
+        } catch (Exception e) { System.err.println("[Donutsmp Economy] Preisliste fehlgeschlagen: " + e); }
+    }
+
+    /** Speichert mehrere geaenderte Basispreise auf einmal. */
+    static synchronized void setAll(Map<String, Long> changes) {
+        try {
+            Map<String, Long> m = new TreeMap<>();
+            if (Files.exists(file())) {
+                Map<String, Long> old = new Gson().fromJson(Files.readString(file()), new TypeToken<Map<String, Long>>() {}.getType());
+                if (old != null) m.putAll(old);
+            }
+            m.putAll(changes);
+            Files.writeString(file(), new GsonBuilder().setPrettyPrinting().create().toJson(m));
+        } catch (Exception e) { System.err.println("[Donutsmp Economy] Preise speichern fehlgeschlagen: " + e); }
     }
 
     /** Speichert einen geaenderten Basispreis in der Preisdatei (bleibt nach dem Neustart erhalten). */
@@ -53,7 +67,7 @@ public class PriceFile {
             }
             m.put(id, base);
             Files.writeString(file(), new GsonBuilder().setPrettyPrinting().create().toJson(m));
-        } catch (Exception e) { System.err.println("[DonutMod] Preis speichern fehlgeschlagen: " + e); }
+        } catch (Exception e) { System.err.println("[Donutsmp Economy] Preis speichern fehlgeschlagen: " + e); }
     }
 
     static void generate() throws java.io.IOException {

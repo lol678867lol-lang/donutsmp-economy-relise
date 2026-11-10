@@ -71,6 +71,18 @@ public class Orders {
     /** Zusaetzlicher Faktor fuer neue Bot-Order-Preise (/opsettings: Order-Preise). */
     public double priceFactor = 1.0;
 
+    /** Skaliert die Bot-Orders bestimmter Items (id -> Faktor) in einem Durchlauf. */
+    public int rescaleBotsFor(Map<String, Double> ratios) {
+        if (ratios.isEmpty()) return 0;
+        int n = 0;
+        for (Order o : orders) {
+            if (o.owner != null) continue;
+            Double r = ratios.get(o.itemId);
+            if (r != null) { o.pricePerItem = Math.max(1, Math.round(o.pricePerItem * r)); n++; }
+        }
+        return n;
+    }
+
     /** Skaliert die Preise aller Bot-Orders (Spieler-Orders bleiben unveraendert). */
     public int rescaleBots(double ratio) {
         int n = 0;
@@ -90,7 +102,7 @@ public class Orders {
 
     /** Spieler-Order: Preis wird sofort bezahlt. Lieferung durch Bots später (deliverDue). */
     public Order playerOrder(UUID owner, String itemId, Map<String, Integer> ench, int amount, long ppi) {
-        if (!eco.take(owner, ppi * amount)) return null;
+        if (!eco.take(owner, Sat.mul(ppi, amount))) return null;
         Order o = new Order(nextId++, owner, itemId, ench, amount, ppi);
         add(o);
         return o;
@@ -117,7 +129,7 @@ public class Orders {
     public long fill(Order o, Stack s, UUID seller) {
         int n = Math.min(o.remaining, s.count());
         o.remaining -= n;
-        long pay = o.pricePerItem * n;
+        long pay = Sat.mul(o.pricePerItem, n);
         eco.add(seller, pay);
         if (o.remaining <= 0) remove(o);
         return pay;
@@ -131,7 +143,7 @@ public class Orders {
     /** Spieler-Order abbrechen: Restbetrag wird zurueckgezahlt. */
     public boolean cancel(Order o) {
         if (!remove(o)) return false;
-        if (o.owner != null) eco.add(o.owner, o.pricePerItem * o.remaining);
+        if (o.owner != null) eco.add(o.owner, Sat.mul(o.pricePerItem, o.remaining));
         return true;
     }
     /** Bots liefern n Items in eine Spieler-Order (Geld lag schon im Escrow). Rueckgabe: wirklich geliefert. */

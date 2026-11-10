@@ -106,6 +106,15 @@ public final class Bases {
                     .executes(c -> DonutMod.msg(c, "§eFake-Basen: " + (Settings.fakeBases ? "§aAN" : "§cAUS")))
                     .then(Commands.literal("on").executes(c -> { Settings.setFakeBases(true); return DonutMod.msg(c, "§aFake-Basen: AN (entstehen wieder automatisch)"); }))
                     .then(Commands.literal("off").executes(c -> { Settings.setFakeBases(false); return DonutMod.msg(c, "§cFake-Basen: AUS (es entstehen keine neuen, bestehende bleiben)"); }))
+                    .then(Commands.literal("height")
+                            .executes(c -> DonutMod.msg(c, "§eBasen-Höhe (Boden): y " + Settings.baseYMin + " bis " + Settings.baseYMax))
+                            .then(Commands.argument("von", com.mojang.brigadier.arguments.IntegerArgumentType.integer(Settings.BASE_Y_LOW, Settings.BASE_Y_HIGH))
+                                    .then(Commands.argument("bis", com.mojang.brigadier.arguments.IntegerArgumentType.integer(Settings.BASE_Y_LOW, Settings.BASE_Y_HIGH))
+                                            .executes(c -> {
+                                                Settings.setBaseY(com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(c, "von"),
+                                                        com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(c, "bis"));
+                                                return DonutMod.msg(c, "§aBasen-Höhe: y " + Settings.baseYMin + " bis " + Settings.baseYMax);
+                                            }))))
                     .then(Commands.literal("spawn")
                             .then(typeNode("stash", 1)).then(typeNode("farm", 2))
                             .then(typeNode("bigstash", 3)).then(typeNode("base", 4))));
@@ -128,7 +137,7 @@ public final class Bases {
             DonutMod.writeSafe(file(), GSON.toJson(new ArrayList<>(DONE)));
             DonutMod.writeSafe(farmFile(), GSON.toJson(new ArrayList<>(FARMS)));
         }
-        catch (Exception e) { System.err.println("[DonutMod] Basen speichern fehlgeschlagen: " + e); }
+        catch (Exception e) { System.err.println("[Donutsmp Economy] Basen speichern fehlgeschlagen: " + e); }
     }
 
     static void load() {
@@ -136,13 +145,13 @@ public final class Bases {
         FARMS.clear();
         try {
             if (Files.exists(farmFile())) { Farm[] fa = GSON.fromJson(Files.readString(farmFile()), Farm[].class); if (fa != null) Collections.addAll(FARMS, fa); }
-        } catch (Exception e) { System.err.println("[DonutMod] Farmen laden fehlgeschlagen: " + e); }
+        } catch (Exception e) { System.err.println("[Donutsmp Economy] Farmen laden fehlgeschlagen: " + e); }
         try {
             if (!Files.exists(file())) return;
             String[] arr = GSON.fromJson(Files.readString(file()), String[].class);
             DONE.clear();
             if (arr != null) Collections.addAll(DONE, arr);
-        } catch (Exception e) { System.err.println("[DonutMod] Basen laden fehlgeschlagen: " + e); }
+        } catch (Exception e) { System.err.println("[Donutsmp Economy] Basen laden fehlgeschlagen: " + e); }
     }
 
     static Random cellRandom(long seed, int i, int j) { return new Random(seed * 31L + i * 341873128712L + j * 132897987541L); }
@@ -177,7 +186,7 @@ public final class Bases {
                     if (dx * dx + dz * dz > 90.0 * 90.0 || !chunksLoaded(level, pos[0], pos[1])) continue;
                     DONE.add(key);
                     try { generate(m, level, cellRandom(level.getSeed() + 7, i, j), pos[0], pos[1]); }
-                    catch (Exception e) { System.err.println("[DonutMod] Basis-Bau fehlgeschlagen: " + e); }
+                    catch (Exception e) { System.err.println("[Donutsmp Economy] Basis-Bau fehlgeschlagen: " + e); }
                 }
         }
     }
@@ -197,7 +206,7 @@ public final class Bases {
         return false;
     }
 
-    static void generate(DonutMod m, ServerLevel level, Random r, int bx, int bz) { generate(m, level, r, bx, bz, 0, 0); }
+    static void generate(DonutMod m, ServerLevel level, Random r, int bx, int bz) { generate(m, level, r, bx, bz, 0, 0, null); }
 
     static boolean FORCE_BIG = false;
     static boolean CUR_NETH = true;    // Stufe der Basis, die gerade gebaut wird (Netherite oder Diamant, nie gemischt)
@@ -207,7 +216,7 @@ public final class Bases {
      * Baut eine Basis. mode: 0 = zufaellig, 1 = stash, 2 = farm, 3 = bigstash, 4 = base (zufaellig Stash oder Farm).
      * tier: 0 = zufaellig, 1 = netherite, 2 = diamant. Rueckgabe: Boden-y, oder Integer.MIN_VALUE wenn es nicht ging.
      */
-    static int generate(DonutMod m, ServerLevel level, Random r, int bx, int bz, int mode, int tier) {
+    static int generate(DonutMod m, ServerLevel level, Random r, int bx, int bz, int mode, int tier, Integer forceY) {
         boolean farm, big;
         if (mode == 0) { farm = r.nextInt(100) < 40; big = !farm && r.nextInt(100) < 15; }
         else if (mode == 4) { farm = r.nextInt(100) < 40; big = false; }
@@ -218,7 +227,10 @@ public final class Bases {
         CUR_NETH = neth;
         try {
             for (int attempt = 0; attempt < 16; attempt++) {
-                int y0 = -46 + r.nextInt(27);   // Boden zwischen y=-46 und y=-20, also immer unter -8
+                if (forceY != null && attempt > 0) break;   // feste Hoehe: nur ein Versuch
+                // Boden-Hoehe: feste y-Angabe oder zufaellig im Bereich aus /fakebase height bzw. /opsettings (Standard -46 bis -20)
+                int y0 = forceY != null ? Math.max(Settings.BASE_Y_LOW, Math.min(Settings.BASE_Y_HIGH, forceY))
+                        : Settings.baseYMin + r.nextInt(Settings.baseYMax - Settings.baseYMin + 1);
                 // keine Fluessigkeit (Wasser/Lava) im Bereich inkl. 2 Bloecken Rand
                 if (hasFluid(level, bx - 2, y0 - 2, bz - 2, bx + sx + 1, y0 + 7, bz + sz + 1)) continue;
                 if (farm) buildFarm(m, level, r, bx, y0, bz, sx, sz);
@@ -230,23 +242,23 @@ public final class Bases {
         return Integer.MIN_VALUE;
     }
 
-    static int spawnHere(com.mojang.brigadier.context.CommandContext<CommandSourceStack> c, int mode, int tier, Integer cx, Integer cz) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+    static int spawnHere(com.mojang.brigadier.context.CommandContext<CommandSourceStack> c, int mode, int tier, Integer cx, Integer cz, Integer cy) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
         ServerPlayer p = c.getSource().getPlayerOrException();
         Level lv = p.level();
         if (!(lv instanceof ServerLevel level) || !level.dimension().equals(Level.OVERWORLD)) return DonutMod.msg(c, "§cNur in der Overworld.");
         DonutMod m = DonutMod.INSTANCE;
         if (m == null || m.enchList.isEmpty()) return DonutMod.msg(c, "§cNoch nicht bereit, versuch es gleich nochmal.");
         int bx = cx != null ? cx : (int) p.getX() + 2, bz = cz != null ? cz : (int) p.getZ() + 2;   // ohne Koordinaten: neben dir
-        int y = generate(m, level, new Random(), bx, bz, mode, tier);
+        int y = generate(m, level, new Random(), bx, bz, mode, tier, cy);
         String name = mode == 1 ? "Stash" : mode == 2 ? "Farm" : mode == 3 ? "Big-Stash" : "Base";
         if (y == Integer.MIN_VALUE) return DonutMod.msg(c, "§cHier ging es nicht (Wasser oder Lava im Weg). Geh ein Stück weiter.");
         return DonutMod.msg(c, "§aFake-" + name + (LAST_NETH ? " (Netherite)" : " (Diamant)") + " gebaut: X=" + bx + " Z=" + bz + ", Boden y=" + y + (cx != null ? "." : " (unter dir)."));
     }
 
-    /** /fakebase spawn <typ> [netherite|dia] [x z] - ohne Koordinaten wird neben dir gebaut. */
+    /** /fakebase spawn <typ> [netherite|dia] [x z [y]] - ohne Koordinaten wird neben dir gebaut, ohne y zufaellig im Hoehenbereich. */
     static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> typeNode(String name, int mode) {
         return Commands.literal(name)
-                .executes(c -> spawnHere(c, mode, 0, null, null))
+                .executes(c -> spawnHere(c, mode, 0, null, null, null))
                 .then(coords(mode, 0))
                 .then(tierNode("netherite", mode, 1))
                 .then(tierNode("dia", mode, 2))
@@ -255,17 +267,22 @@ public final class Bases {
 
     static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> tierNode(String lit, int mode, int tier) {
         return Commands.literal(lit)
-                .executes(c -> spawnHere(c, mode, tier, null, null))
+                .executes(c -> spawnHere(c, mode, tier, null, null, null))
                 .then(coords(mode, tier));
     }
 
-    /** x und z (absolute Blockkoordinaten, Ecke der Basis). */
+    /** x, z (und optional y = Boden-Hoehe): absolute Blockkoordinaten, Ecke der Basis. */
     static com.mojang.brigadier.builder.RequiredArgumentBuilder<CommandSourceStack, Integer> coords(int mode, int tier) {
         return Commands.argument("x", com.mojang.brigadier.arguments.IntegerArgumentType.integer(-29_999_000, 29_999_000))
                 .then(Commands.argument("z", com.mojang.brigadier.arguments.IntegerArgumentType.integer(-29_999_000, 29_999_000))
                         .executes(c -> spawnHere(c, mode, tier,
                                 com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(c, "x"),
-                                com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(c, "z"))));
+                                com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(c, "z"), null))
+                        .then(Commands.argument("y", com.mojang.brigadier.arguments.IntegerArgumentType.integer(Settings.BASE_Y_LOW, Settings.BASE_Y_HIGH))
+                                .executes(c -> spawnHere(c, mode, tier,
+                                        com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(c, "x"),
+                                        com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(c, "z"),
+                                        com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(c, "y")))));
     }
 
     static void room(ServerLevel level, int x0, int y0, int z0, int sx, int sz) {
