@@ -3,6 +3,7 @@ package de.donutmod.fabric;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.LongArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
+import net.minecraft.network.protocol.game.ClientboundSoundPacket;
 import net.minecraft.commands.arguments.EntityArgument;
 import com.mojang.brigadier.context.CommandContext;
 import de.donutmod.core.*;
@@ -468,7 +469,9 @@ public class DonutMod implements ModInitializer {
     static boolean isShulker(ItemStack st) { return !st.isEmpty() && idOfStatic(st).endsWith("shulker_box"); }
 
     /** Ton nur fuer diesen Spieler (andere hoeren z.B. den Kauf-Ton im Auktionshaus nicht). */
-    static void ping(ServerPlayer p, SoundEvent s, float pitch) { p.playNotifySound(s, SoundSource.PLAYERS, 0.8f, pitch); }
+    static void ping(ServerPlayer p, SoundEvent s, float pitch) {
+        p.connection.send(new ClientboundSoundPacket(Holder.direct(s), SoundSource.PLAYERS, p.getX(), p.getY(), p.getZ(), 0.8f, pitch, p.getRandom().nextLong()));
+    }
 
     /** Wie oft ein Item gleichzeitig vorkommen darf: teure/seltene Items nur 1-60 mal (Drachenei: 1x). */
     int cap(String id) {
