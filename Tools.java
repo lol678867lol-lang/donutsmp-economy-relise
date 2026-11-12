@@ -75,7 +75,7 @@ public final class Tools {
         long pay = m.sell.sell(sp.getUUID(), list).payout();
         for (Container c : parts) c.setChanged();
         DonutMod.ping(sp, SoundEvents.EXPERIENCE_ORB_PICKUP, 1.0f);
-        Gui.say(sp, "§aKisteninhalt verkauft für $" + DonutMod.fmt(pay) + " §7| Kontostand: $" + DonutMod.fmt(m.eco.get(sp.getUUID())));
+        Gui.say(sp, "§aKisteninhalt verkauft für $" + DonutMod.fmt(pay) + " §7| Kontostand: $" + DonutMod.fmtBig(m.eco.getBig(sp.getUUID())));
     }
 
     static boolean breakOne(ServerLevel level, ServerPlayer sp, BlockPos q, TagKey<Block> tag, ItemStack tool) {

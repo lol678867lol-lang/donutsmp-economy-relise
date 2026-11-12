@@ -153,7 +153,7 @@ public final class Market {
                 made++;
                 continue;
             }
-            Item it = pool.get(RND.nextInt(pool.size()));
+            Item it = !m.modPool.isEmpty() && RND.nextInt(100) < 15 ? m.modPool.get(RND.nextInt(m.modPool.size())) : pool.get(RND.nextInt(pool.size()));
             String id = m.idOf(it);
             boolean book = it == Items.ENCHANTED_BOOK;
             Map<String, Integer> ench = NONE;
@@ -186,7 +186,7 @@ public final class Market {
                 made++;
                 continue;
             }
-            Item it = pool.get(RND.nextInt(pool.size()));
+            Item it = !m.modPool.isEmpty() && RND.nextInt(100) < 15 ? m.modPool.get(RND.nextInt(m.modPool.size())) : pool.get(RND.nextInt(pool.size()));
             String id = m.idOf(it);
             boolean book = it == Items.ENCHANTED_BOOK;
             Map<String, Integer> ench = NONE;
@@ -201,6 +201,44 @@ public final class Market {
             if (plain) orderCount.merge(id, 1, Integer::sum);
             made++;
         }
+    }
+
+    /**
+     * Stellt sicher, dass JEDES Item einer installierten Mod im Markt vorkommt: fehlt es in /ah, kommen 2 Angebote dazu,
+     * fehlt es bei den Orders, 2 Orders. Wichtig fuer bestehende Welten (Markt war schon voll) und beim Einschalten von /mod on.
+     */
+    void ensureModItems() {
+        if (!Settings.bots || m.modPool.isEmpty()) return;
+        Set<String> inAh = new HashSet<>(), inOrders = new HashSet<>();
+        for (AuctionHouse.Listing l : m.ah.all()) if (DonutMod.isMod(l.stack.id())) inAh.add(l.stack.id());
+        for (Orders.Order o : m.orders.all()) if (DonutMod.isMod(o.itemId)) inOrders.add(o.itemId);
+        int a = 0, o = 0;
+        for (Item it : m.modPool) {
+            String id = m.idOf(it);
+            int max = Math.max(1, it.getDefaultInstance().getMaxStackSize());
+            if (!inAh.contains(id))
+                for (int i = 0; i < 2; i++) {
+                    m.ah.botList(new Stack(id, max > 1 ? stackSize(max) : 1, NONE), RND);
+                    ahCount.merge(id, 1, Integer::sum);
+                    a++;
+                }
+            if (!inOrders.contains(id))
+                for (int i = 0; i < 2; i++) {
+                    m.orders.botOrder(id, NONE, botAmount(it, id, true), RND);
+                    orderCount.merge(id, 1, Integer::sum);
+                    o++;
+                }
+        }
+        ahCache.clear(); ahCacheTime.clear(); ordersCache = null;
+        if (a + o > 0) System.out.println("[Donutsmp Economy] Mod-Items im Markt ergaenzt: " + a + " Angebote, " + o + " Orders (" + m.modPool.size() + " Mod-Items)");
+    }
+
+    /** Anzahl Bot-Eintraege fuer Mod-Items (ah = true: Angebote, sonst Orders). */
+    int countMod(boolean ah) {
+        int n = 0;
+        if (ah) { for (AuctionHouse.Listing l : m.ah.all()) if (DonutMod.isMod(l.stack.id())) n++; }
+        else for (Orders.Order o : m.orders.all()) if (DonutMod.isMod(o.itemId)) n++;
+        return n;
     }
 
     /** Je Shard-Werkzeug/Spawner immer eine Bot-Order. */

@@ -57,6 +57,7 @@ import net.minecraft.world.scores.Scoreboard;
 import net.minecraft.world.scores.criteria.ObjectiveCriteria;
 
 import java.nio.file.*;
+import java.math.BigInteger;
 import java.util.*;
 
 /** Fabric-Anbindung (Mojang-Mappings, MC 1.21.11) an den versionsunabhaengigen Core. */
@@ -161,18 +162,18 @@ public class DonutMod implements ModInitializer {
         // Kill-Belohnung: der Moerder bekommt 10 % vom Geld des Opfers
         ServerLivingEntityEvents.AFTER_DEATH.register((entity, source) -> {
             if (!(entity instanceof ServerPlayer victim) || !(source.getEntity() instanceof ServerPlayer killer) || killer == victim) return;
-            long amt = eco.get(victim.getUUID()) / 10;
-            if (amt <= 0) return;
-            eco.take(victim.getUUID(), amt);
-            eco.add(killer.getUUID(), amt);
+            BigInteger amt = eco.getBig(victim.getUUID()).divide(BigInteger.TEN);
+            if (amt.signum() <= 0) return;
+            eco.takeBig(victim.getUUID(), amt);
+            eco.addBig(killer.getUUID(), amt);
             srv.getPlayerList().broadcastSystemMessage(Lang.lit("§c" + killer.getName().getString() + " §7hat §c"
-                    + victim.getName().getString() + " §7getötet und §a$" + fmtShort(amt) + " §7(10 %) erhalten."), false);
+                    + victim.getName().getString() + " §7getötet und §a$" + fmtBig(amt) + " §7(10 %) erhalten."), false);
             ping(killer, SoundEvents.PLAYER_LEVELUP, 1.2f);
         });
         OrderBuilder.register(this);
         PriceEditor.register(this);
 
-        ServerLifecycleEvents.SERVER_STARTED.register(server -> { srv = server; resetState(); Tpa.BY_TARGET.clear(); Hoppers.TRACKED.clear(); OrderBuilder.AWAIT.clear(); loadBalances(); loadNames(); Settings.load(); PricePropagation.reset(); Easter.reset(); applyFactorsNoRescale(); initEnchants(); PriceFile.loadInto(prices); Custom.registerPrices(prices); initItems(); loadMarket(); market = new Market(this); market.init(); seedCustom(); market.ensureCustomOrders(); });
+        ServerLifecycleEvents.SERVER_STARTED.register(server -> { srv = server; resetState(); Tpa.BY_TARGET.clear(); Hoppers.TRACKED.clear(); OrderBuilder.AWAIT.clear(); loadBalances(); loadNames(); Settings.load(); PricePropagation.reset(); Easter.reset(); applyFactorsNoRescale(); initEnchants(); PriceFile.loadInto(prices); Custom.registerPrices(prices); PriceFile.fillMissing(prices); initItems(); loadMarket(); market = new Market(this); market.init(); seedCustom(); market.ensureCustomOrders(); market.ensureModItems(); });
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> saveBalances());
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
             ServerPlayer jp = handler.getPlayer();
@@ -210,8 +211,8 @@ public class DonutMod implements ModInitializer {
         saveNames();
         saveMarket();
         try {
-            Map<String, Long> out = new HashMap<>();
-            eco.snapshot().forEach((u, v) -> out.put(u.toString(), v));
+            Map<String, String> out = new HashMap<>();
+            eco.snapshotBig().forEach((u, v) -> out.put(u.toString(), v.toString()));
             writeSafe(saveFile(), GSON.toJson(out));
         } catch (Exception e) { System.err.println("[Donutsmp Economy] Speichern fehlgeschlagen: " + e); }
     }
@@ -219,10 +220,10 @@ public class DonutMod implements ModInitializer {
     void loadBalances() {
         try {
             if (!Files.exists(saveFile())) return;
-            Map<String, Long> in = GSON.fromJson(Files.readString(saveFile()), new TypeToken<Map<String, Long>>() {}.getType());
-            Map<UUID, Long> data = new HashMap<>();
-            if (in != null) in.forEach((k, v) -> data.put(UUID.fromString(k), v));
-            eco.load(data);
+            Map<String, String> in = GSON.fromJson(Files.readString(saveFile()), new TypeToken<Map<String, String>>() {}.getType());
+            Map<UUID, BigInteger> data = new HashMap<>();
+            if (in != null) in.forEach((k, v) -> data.put(UUID.fromString(k), new java.math.BigDecimal(v).toBigInteger()));   // alte Dateien (Zahlen) und neue (Texte)
+            eco.loadBig(data);
         } catch (Exception e) { System.err.println("[Donutsmp Economy] Laden fehlgeschlagen: " + e); }
     }
 
@@ -246,12 +247,12 @@ public class DonutMod implements ModInitializer {
     void sendHeads(ServerPlayer viewer, Objective head, List<ServerPlayer> all) {
         for (ServerPlayer t : all)
             viewer.connection.send(new ClientboundSetScorePacket(t.getScoreboardName(), head.getName(), 0, Optional.empty(),
-                    Optional.of(new FixedFormat(Lang.lit("§a$" + fmt(eco.get(t.getUUID())))))));
+                    Optional.of(new FixedFormat(Lang.lit("§a$" + fmtBig(eco.getBig(t.getUUID())))))));
     }
 
     void sendMoney(ServerPlayer p, Objective obj) {
         p.connection.send(new ClientboundSetScorePacket("money", obj.getName(), 1,
-                Optional.of(Lang.lit("§eGeld: §a$" + fmt(eco.get(p.getUUID())))), Optional.of(BlankFormat.INSTANCE)));
+                Optional.of(Lang.lit("§eGeld: §a$" + fmtBig(eco.getBig(p.getUUID())))), Optional.of(BlankFormat.INSTANCE)));
         p.connection.send(new ClientboundSetScorePacket("info", obj.getName(), 0,
                 Optional.of(Lang.lit("§9Economy")), Optional.of(BlankFormat.INSTANCE)));
     }
@@ -318,6 +319,7 @@ public class DonutMod implements ModInitializer {
         Settings.setMods(on);
         if (!on) removeBots(DonutMod::isMod);
         initItems();
+        if (on && market != null) market.ensureModItems();   // Mod-Items sofort in /ah und Orders bringen
     }
 
     /** Entfernt alle Bot-Angebote und Bot-Orders, deren Item das Filter erfuellt (ein Durchlauf, schnell auch bei Millionen). */
@@ -334,17 +336,20 @@ public class DonutMod implements ModInitializer {
     void initItems() {
         ITEM_BY_ID.clear();
         pool.clear();
+        modPool.clear();
         for (Item it : BuiltInRegistries.ITEM) {
             String id = BuiltInRegistries.ITEM.getKey(it).toString();
             ITEM_BY_ID.put(id, it);
             String p = id.substring(id.indexOf(':') + 1);
             if (p.equals("air")) continue;
             boolean bad = false;
-            for (String b : BAD) if (p.contains(b)) { bad = true; break; }
-            if (!bad && allowed(id)) pool.add(it);
+            for (String b : BAD) if (b.equals("light") ? p.equals("light") : p.contains(b)) { bad = true; break; }   // "light" nur der Licht-Block, nicht light_blue_*
+            if (!bad && allowed(id)) { pool.add(it); if (isMod(id)) modPool.add(it); }
         }
     }
 
+    /** Alle handelbaren Items anderer Mods (Teilmenge von pool). */
+    final List<Item> modPool = new ArrayList<>();
     final Map<Item, String> idCache = new HashMap<>();
     static final Map<Item, String> NAME_CACHE = new HashMap<>();
     final Map<String, Integer> capCache = new HashMap<>();
@@ -677,6 +682,38 @@ public class DonutMod implements ModInitializer {
         return sign + (tenths % 10 == 0 ? String.valueOf(tenths / 10) : (tenths / 10) + "." + (tenths % 10)) + suf;
     }
 
+    /** Endungen fuer riesige Zahlen: 10^(3*Index). Darueber wird wissenschaftlich geschrieben (1.2e70). */
+    static final String[] SUF = {"", "k", "m", "b", "t", "q", "qi", "sx", "sp", "oc", "no", "dc", "ud", "dd", "td", "qd", "qid", "sxd", "spd", "ocd", "nod", "vg"};
+
+    /** Wie fmt, aber fuer beliebig grosse Kontostaende (BigInteger). */
+    static String fmtBig(BigInteger v) {
+        if (!Settings.shortNumbers) return fullBig(v);
+        String digits = v.abs().toString();
+        String sign = v.signum() < 0 ? "-" : "";
+        if (digits.length() <= 3) return v.toString();
+        int group = (digits.length() - 1) / 3;
+        if (group >= SUF.length) return sign + digits.charAt(0) + "." + digits.charAt(1) + "e" + (digits.length() - 1);
+        int intLen = digits.length() - group * 3;                 // 1 bis 3 Stellen vor dem Komma
+        char dec = digits.charAt(intLen);                          // eine Nachkommastelle, abgeschnitten
+        return sign + digits.substring(0, intLen) + (dec == '0' ? "" : "." + dec) + SUF[group];
+    }
+
+    static String fullBig(BigInteger v) { return String.format(Locale.GERMANY, "%,d", v); }
+
+    /** Betrag mit Endung (k ... vg), z.B. 5sx oder 1.5qi; fuer /money. null bei Fehler. Obergrenze: 10^100. */
+    static BigInteger parseBig(String raw) {
+        String s = raw.trim().toLowerCase(Locale.ROOT).replace(",", ".");
+        int best = 0;
+        for (int i = 1; i < SUF.length; i++) if (s.endsWith(SUF[i]) && (best == 0 || SUF[i].length() > SUF[best].length())) best = i;
+        try {
+            if (best > 0) s = s.substring(0, s.length() - SUF[best].length());
+            java.math.BigDecimal d = new java.math.BigDecimal(s).movePointRight(3 * best);
+            BigInteger v = d.toBigInteger();
+            if (v.signum() < 0 || v.compareTo(BigInteger.TEN.pow(100)) > 0) return null;
+            return v;
+        } catch (NumberFormatException e) { return null; }
+    }
+
     /** Volle Zahl mit Tausenderpunkten (3.587). */
     static String fmtFull(long n) { return String.format(Locale.GERMANY, "%,d", n); }
 
@@ -707,7 +744,7 @@ public class DonutMod implements ModInitializer {
                             if (amt <= 0) return msg(c, "§cUngültiger Betrag. Beispiele: 500, 1.5k, 2m");
                             if (from.getUUID().equals(to.getUUID())) return msg(c, "§cDu kannst dir nicht selbst Geld senden.");
                             if (!eco.take(from.getUUID(), amt))
-                                return msg(c, "§cNicht genug Geld. Du hast $" + fmt(eco.get(from.getUUID())) + ".");
+                                return msg(c, "§cNicht genug Geld. Du hast $" + fmtBig(eco.getBig(from.getUUID())) + ".");
                             eco.add(to.getUUID(), amt);
                             to.sendSystemMessage(Lang.lit("§a" + from.getName().getString() + " hat dir $" + fmt(amt) + " gesendet."));
                             return msg(c, "§aDu hast $" + fmt(amt) + " an " + to.getName().getString() + " gesendet.");
@@ -731,8 +768,8 @@ public class DonutMod implements ModInitializer {
         d.register(Commands.literal("opsettings").requires(isOp).executes(c -> { Gui.openOpSettings(this, c.getSource().getPlayerOrException()); return 1; }));
         // /bot: on | off | speed <n> | create order <item> <preis> [menge] | create ah <item> <preis> [menge]   (nur OP)
         d.register(Commands.literal("bot").requires(isOp)
-                .executes(c -> msg(c, "§eBots: " + (Settings.bots ? "§aAN" : "§cAUS") + " §7| Angebote: " + fmt(ah.size()) + ", Orders: " + fmt(orders.size()) + " §7| Tempo: " + Settings.botTick + "x"))
-                .then(Commands.literal("on").executes(c -> { Settings.setBots(true); return msg(c, "§aBots: AN (Angebote und Orders füllen sich wieder)"); }))
+                .executes(c -> msg(c, "§eBots: " + (Settings.bots ? "§aAN" : "§cAUS") + " §7| Angebote: " + fmt(ah.size()) + ", Orders: " + fmt(orders.size()) + " §7| Tempo: " + Settings.botTick + "x" + " §7| Mod-Items: " + modPool.size() + " (AH " + (market == null ? 0 : market.countMod(true)) + " / Orders " + (market == null ? 0 : market.countMod(false)) + ")"))
+                .then(Commands.literal("on").executes(c -> { Settings.setBots(true); if (market != null) market.ensureModItems(); return msg(c, "§aBots: AN (Angebote und Orders füllen sich wieder)"); }))
                 .then(Commands.literal("off").executes(c -> {
                     Settings.setBots(false);
                     removeBots(id -> true);
@@ -782,8 +819,8 @@ public class DonutMod implements ModInitializer {
 
         d.register(Commands.literal("bal")
                 .executes(c -> {
-                    long b = eco.get(c.getSource().getPlayerOrException().getUUID());
-                    return msg(c, "§eKontostand: §a$" + fmt(b) + " §7(" + fmtFull(b) + ")");
+                    BigInteger b = eco.getBig(c.getSource().getPlayerOrException().getUUID());
+                    return msg(c, "§eKontostand: §a$" + fmtBig(b) + " §7(" + fullBig(b) + ")");
                 })
                 .then(Commands.argument("spieler", StringArgumentType.word())
                         .suggests((ctx, sb) -> SharedSuggestionProvider.suggest(names.values(), sb))
@@ -791,7 +828,7 @@ public class DonutMod implements ModInitializer {
                             String n = StringArgumentType.getString(c, "spieler");
                             UUID u = uuidOfName(n);
                             if (u == null) return msg(c, "§cSpieler unbekannt: " + n);
-                            return msg(c, "§e" + names.getOrDefault(u, n) + " hat §a$" + fmt(eco.get(u)) + " §7($" + fmtFull(eco.get(u)) + ")");
+                            return msg(c, "§e" + names.getOrDefault(u, n) + " hat §a$" + fmtBig(eco.getBig(u)) + " §7($" + fullBig(eco.getBig(u)) + ")");
                         })));
 
         d.register(Commands.literal("meta").executes(c -> {
@@ -870,17 +907,17 @@ public class DonutMod implements ModInitializer {
         UUID u = uuidOfName(n);
         if (u == null) return msg(c, "§cSpieler unbekannt (muss schon einmal beigetreten sein): " + n);
         String raw = StringArgumentType.getString(c, "betrag");
-        long amt = raw.equals("0") ? 0 : parseAmount(raw);
-        if (amt < 0 || (amt == 0 && !op.equals("set"))) return msg(c, "§cUngültiger Betrag. Beispiele: 500, 1.5k, 2m, 3b, 1t");
-        long cur = eco.get(u);
+        BigInteger amt = raw.equals("0") ? BigInteger.ZERO : parseBig(raw);   // auch riesige Betraege: 5sx, 1.5vg, ...
+        if (amt == null || (amt.signum() == 0 && !op.equals("set"))) return msg(c, "§cUngültiger Betrag. Beispiele: 500, 1.5k, 2m, 3b, 1t, 5sx");
+        BigInteger cur = eco.getBig(u);
         switch (op) {
-            case "add" -> eco.add(u, amt);
-            case "remove" -> eco.take(u, Math.min(amt, cur));
-            default -> { if (amt >= cur) eco.add(u, amt - cur); else eco.take(u, cur - amt); }
+            case "add" -> eco.addBig(u, amt);
+            case "remove" -> eco.takeBig(u, amt.min(cur));
+            default -> eco.addBig(u, amt.subtract(cur));
         }
         ServerPlayer on = srv == null ? null : srv.getPlayerList().getPlayer(u);
-        if (on != null) on.sendSystemMessage(Lang.lit("§eDein Kontostand: §a$" + fmt(eco.get(u))));
-        return msg(c, "§aKontostand von " + names.getOrDefault(u, n) + ": $" + fmt(eco.get(u)));
+        if (on != null) on.sendSystemMessage(Lang.lit("§eDein Kontostand: §a$" + fmtBig(eco.getBig(u))));
+        return msg(c, "§aKontostand von " + names.getOrDefault(u, n) + ": $" + fmtBig(eco.getBig(u)));
     }
 
     int worth(CommandContext<CommandSourceStack> c, String name) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
@@ -926,7 +963,7 @@ public class DonutMod implements ModInitializer {
         if (stacks.isEmpty()) return msg(c, "§cNichts zu verkaufen.");
         long pay = sell.sell(p.getUUID(), stacks).payout();
         ping(p, SoundEvents.EXPERIENCE_ORB_PICKUP, 1.0f);
-        return msg(c, "§aVerkauft für $" + fmt(pay) + " §7| Kontostand: $" + fmt(eco.get(p.getUUID())));
+        return msg(c, "§aVerkauft für $" + fmt(pay) + " §7| Kontostand: $" + fmtBig(eco.getBig(p.getUUID())));
     }
 
     /** "kelp" -> "minecraft:kelp"; Items anderer Mods auch ohne Namensraum (z.B. "brass_ingot"). null = unbekannt. */

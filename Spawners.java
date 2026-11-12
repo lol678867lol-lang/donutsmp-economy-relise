@@ -1,5 +1,7 @@
 package de.donutmod.fabric;
 
+import de.donutmod.core.Sat;
+
 import com.google.gson.Gson;
 import de.donutmod.core.Stack;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerEntityEvents;
@@ -224,11 +226,11 @@ public final class Spawners {
             for (Object[] row : d) {
                 double base = ((Number) row[1]).doubleValue();
                 long n = rounds <= 1
-                        ? Math.max(0, Math.round(base * (0.5 + DonutMod.RND.nextDouble()))) * s.stack
-                        : (long) Math.min(9e15, Math.max(0, Math.round(base * rounds * (0.9 + 0.2 * DonutMod.RND.nextDouble()))) * (double) s.stack);
+                        ? Sat.mul(Math.max(0, Math.round(base * (0.5 + DonutMod.RND.nextDouble()))), s.stack)
+                        : (long) Math.min(9.2e18, Math.max(0, Math.round(base * rounds * (0.9 + 0.2 * DonutMod.RND.nextDouble()))) * (double) s.stack);
                 if (n == 0) continue;
                 long cur = s.store.getOrDefault((String) row[0], 0L);
-                s.store.put((String) row[0], Math.min(CAP * s.stack, cur + n));
+                s.store.put((String) row[0], Sat.add(cur, n));   // kein Lager-Limit mehr (erst bei 9.2 Trillionen pro Item ist Schluss)
             }
         }
     }

@@ -70,7 +70,8 @@ public class PriceFile {
         } catch (Exception e) { System.err.println("[Donutsmp Economy] Preis speichern fehlgeschlagen: " + e); }
     }
 
-    static void generate() throws java.io.IOException {
+    /** Berechnet die komplette Standard-Preisliste (Rezept-Preise, Schaetzungen, feste Preise) - auch fuer Items anderer Mods. */
+    static Map<String, Long> compute() {
         Map<String, Long> known = new HashMap<>();
         for (Object[] r : DonutMod.KNOWN) known.put("minecraft:" + r[0], ((Number) r[1]).longValue());
         Map<String, Long> old = new TreeMap<>();     // Fixpreise + Schaetzung (wie bisher)
@@ -90,7 +91,35 @@ public class PriceFile {
         Map<String, Long> out = new TreeMap<>();
         for (String id : old.keySet())
             out.put(id, !fixed.containsKey(id) && g.has(id) ? g.price(id) : old.get(id));
-        Files.writeString(file(), new GsonBuilder().setPrettyPrinting().create().toJson(out));
+        return out;
+    }
+
+    static void generate() throws java.io.IOException {
+        Files.writeString(file(), new GsonBuilder().setPrettyPrinting().create().toJson(compute()));
+    }
+
+    /**
+     * Items, die in der Preisliste fehlen (z.B. weil eine Mod nach dem Erstellen der Welt dazugekommen ist), bekommen ihren
+     * Standardpreis. Sonst haetten sie nur den Platzhalterpreis. Rueckgabe: Anzahl ergaenzter Items.
+     */
+    static int fillMissing(PriceBook prices) {
+        try {
+            boolean any = false;
+            for (Item item : BuiltInRegistries.ITEM) {
+                String id = BuiltInRegistries.ITEM.getKey(item).toString();
+                if (!id.equals("minecraft:air") && prices.baseOf(id) == null) { any = true; break; }
+            }
+            if (!any) return 0;
+            Map<String, Long> all = compute();
+            Map<String, Long> add = new TreeMap<>();
+            for (var e : all.entrySet()) if (prices.baseOf(e.getKey()) == null) add.put(e.getKey(), e.getValue());
+            add.forEach(prices::setBase);
+            if (!add.isEmpty()) setAll(add);
+            return add.size();
+        } catch (Exception e) {
+            System.err.println("[Donutsmp Economy] Fehlende Preise ergaenzen fehlgeschlagen: " + e);
+            return 0;
+        }
     }
 
     static final String[][] MAT = {{"netherite", "1800"}, {"diamond", "500"}, {"golden", "120"}, {"gold", "120"},

@@ -217,7 +217,7 @@ public final class Gui {
                 box.setItem(46, named(Items.SPECTRAL_ARROW, "§e-" + jump() + " Seiten"));
                 box.setItem(52, named(Items.SPECTRAL_ARROW, "§e+" + jump() + " Seiten"));
             }
-            box.setItem(49, named(Items.GOLD_INGOT, "§6Dein Geld: §a$" + DonutMod.fmt(m.eco.get(p.getUUID())),
+            box.setItem(49, named(Items.GOLD_INGOT, "§6Dein Geld: §a$" + DonutMod.fmtBig(m.eco.getBig(p.getUUID())),
                     "§7Seite " + (page + 1) + "/" + pages(), "§7Einträge: §f" + view.size()));
             for (Map.Entry<Integer, Supplier<ItemStack>> e : icons.entrySet()) box.setItem(e.getKey(), e.getValue().get());
         }
@@ -609,7 +609,7 @@ public final class Gui {
         if (list.isEmpty()) return;
         long pay = m.sell.sell(p.getUUID(), list).payout();
         DonutMod.ping(p, SoundEvents.EXPERIENCE_ORB_PICKUP, 1.0f);
-        say(p, "§aVerkauft für $" + DonutMod.fmt(pay) + " §7| Kontostand: $" + DonutMod.fmt(m.eco.get(p.getUUID())));
+        say(p, "§aVerkauft für $" + DonutMod.fmt(pay) + " §7| Kontostand: $" + DonutMod.fmtBig(m.eco.getBig(p.getUUID())));
     }
 
     // ---------- Settings ----------

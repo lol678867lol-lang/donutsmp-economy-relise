@@ -14,9 +14,13 @@ NEU
     Preise in Prozent: "Alle Preise" (alle Items inkl. Bot-Angebote/-Orders) und "Order-Preise" (nur Bot-Orders): -10 %, +10 %, eigener Wert, zuruecksetzen.
 - Sell Axe: auf eine Kiste/ein Fass schauen -> Wert des Inhalts steht in der Action-Bar
 - Auktionshaus: der Kauf-Ton ist nur fuer den Kaeufer zu hoeren (nicht fuer andere Spieler)
-- Geld ueberlaeuft nie: bei extrem hohen Betraegen bleibt es am Maximum (9.2qi) stehen und geht nie ins Minus
+- Geld hat KEIN Limit: Kontostaende sind unbegrenzt gross (BigInteger), gehen nie ins Minus. Anzeige mit Endungen k m b t q qi sx sp oc no dc ... vg (10^63),
+  darueber wissenschaftlich (1.2e70). /money <add|remove|set> <Spieler> <Betrag> versteht alle Endungen (z.B. 5sx).
+- Spawner: kein Lager-Limit mehr (gespeichert wird bis 9.2 Trillionen pro Item).
 - Orders erstellen: Preis und Menge lassen sich per Klick auf die Anzeige frei eintippen (nicht nur +10k)
 - Bots machen mehr Orders auf Basen-Loot (Netherite/Diamant-Gear, Gaps, Totems ...)
+- Mod-Items in /ah und Orders: Beim Start (und bei /mod on, /bot on) bekommt JEDES Item einer installierten Mod 2 Bot-Angebote und 2 Bot-Orders,
+  auch in schon vollen, bestehenden Welten. Fehlende Preise (z.B. neue Mod) werden automatisch ergaenzt. /bot zeigt, wie viele Mod-Items im Markt sind.
 - Sprache: folgt der Minecraft-Sprache. Deutsch (de_*) = deutsch, alles andere = englisch (vom ersten Spieler uebernommen)
 - /mod on|off (nur OP): Items anderer Mods verkaufbar / in /ah und Orders
 - Preise aus Rezepten (Zutaten + 10 %, nie billiger als das Ausgangsmaterial), auch fuer Mod-Items
